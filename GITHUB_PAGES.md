@@ -61,3 +61,13 @@ python3 scripts/merge_fuelio_costco.py
 ```
 
 That writes `data/fuel.private.csv`, which is ignored by git, and a sanitized `data/fuel.csv`, which is intended for GitHub Pages.
+
+## Scheduled Costco Refresh
+
+GitHub Pages serves files only; it cannot poll Costco. This repo includes a local monitor instead:
+
+```bash
+scripts/run_costco_monitor.sh
+```
+
+The scheduled wrapper uses the local managed Brave browser on CDP port `9222` to read Costco gas receipts, updates ignored local CSVs, rebuilds the sanitized public `data/fuel.csv`, commits it, and pushes it. The Windows scheduled task is named `Fuelio Costco Monitor` and is set for Sundays at 10:00 PM local time.

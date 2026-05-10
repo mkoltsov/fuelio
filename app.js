@@ -14,6 +14,7 @@ const state = {
 };
 
 const el = (id) => document.getElementById(id);
+const SETTING_FIELDS = ["vehicleName", "distanceUnit", "fuelUnit", "currencySymbol"];
 
 function parseCSV(text) {
   const rows = [];
@@ -142,6 +143,7 @@ function loadSaved() {
     state.maintenance = Array.isArray(data.maintenance) ? data.maintenance : [];
     state.reminders = Array.isArray(data.reminders) ? data.reminders : [];
     state.settings = { ...state.settings, ...(data.settings || {}) };
+    state.chartMetric = ["spend", "price", "gallons", "mpg"].includes(data.chartMetric) ? data.chartMetric : state.chartMetric;
     return true;
   } catch {
     return false;
@@ -398,7 +400,20 @@ function renderReminders() {
   `).join("");
 }
 
+function syncChartControls() {
+  document.querySelectorAll(".segment").forEach((button) => {
+    button.classList.toggle("active", button.dataset.chart === state.chartMetric);
+  });
+}
+
+function syncSettingsControls() {
+  for (const field of SETTING_FIELDS) {
+    el(field).value = state.settings[field];
+  }
+}
+
 function renderAll() {
+  syncChartControls();
   renderMetrics();
   drawChart();
   renderRecent();
@@ -434,6 +449,7 @@ function bindEvents() {
       document.querySelectorAll(".segment").forEach((b) => b.classList.remove("active"));
       button.classList.add("active");
       state.chartMetric = button.dataset.chart;
+      save();
       drawChart();
     });
   });
@@ -473,14 +489,16 @@ function bindEvents() {
     renderAll();
     event.target.value = "";
   });
-  ["vehicleName", "distanceUnit", "fuelUnit", "currencySymbol"].forEach((field) => {
+  syncSettingsControls();
+  SETTING_FIELDS.forEach((field) => {
     const node = el(field);
-    node.value = state.settings[field];
-    node.addEventListener("change", () => {
+    const updateSetting = () => {
       state.settings[field] = node.value;
       save();
       renderAll();
-    });
+    };
+    node.addEventListener("input", updateSetting);
+    node.addEventListener("change", updateSetting);
   });
   window.addEventListener("resize", drawChart);
 }

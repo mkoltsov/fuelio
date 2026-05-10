@@ -1,3 +1,5 @@
 data/*.private.csv
 data/Fuelio_latest.csv
 data/costco_fuel.csv
+logs/
+__pycache__/
