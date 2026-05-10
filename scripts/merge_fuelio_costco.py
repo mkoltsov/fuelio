@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FUELIO = ROOT / "data" / "Fuelio_latest.csv"
 COSTCO = ROOT / "data" / "costco_fuel.csv"
 OUT = ROOT / "data" / "fuel.private.csv"
+PUBLIC_OUT = ROOT / "data" / "fuel.csv"
 MAINT_OUT = ROOT / "data" / "maintenance.csv"
 
 FUEL_HEADERS = [
@@ -66,6 +67,11 @@ def date_key(value):
 def costco_receipt(notes):
     match = re.search(r"Costco receipt ([0-9]+)", notes or "")
     return match.group(1) if match else ""
+
+
+def public_notes(notes):
+    price_match = re.search(r"\b[0-9]+(?:\.[0-9]{1,3})?/gal\b", notes or "")
+    return price_match.group(0) if price_match else ""
 
 
 def normalized_match_key(row):
@@ -160,9 +166,21 @@ def merge():
 
     merged.sort(key=lambda row: (row.get("date", ""), num(row.get("odometer")), row.get("source", "")))
     with OUT.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=FUEL_HEADERS)
+        writer = csv.DictWriter(handle, fieldnames=FUEL_HEADERS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(merged)
+
+    public_rows = []
+    for row in merged:
+        public_row = dict(row)
+        public_row["notes"] = public_notes(public_row.get("notes", ""))
+        public_row["fuelio_unique_id"] = ""
+        public_rows.append(public_row)
+
+    with PUBLIC_OUT.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FUEL_HEADERS, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(public_rows)
 
     if not MAINT_OUT.exists() or MAINT_OUT.read_text(encoding="utf-8").strip() == "date,odometer,service,category,cost,vendor,notes":
         MAINT_OUT.write_text("date,odometer,service,category,cost,vendor,notes\n", encoding="utf-8")
@@ -173,6 +191,7 @@ def merge():
         "merged_rows": len(merged),
         "matched_costco_rows": len(matched_costco_keys),
         "output": str(OUT),
+        "public_output": str(PUBLIC_OUT),
     }
 
 
