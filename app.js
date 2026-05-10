@@ -157,7 +157,7 @@ async function loadSeedData() {
     throw new Error(`Missing data file: ${paths.join(" or ")}`);
   };
   const [fuelText, maintenanceText, remindersText] = await Promise.all([
-    fetchFirst(["data/fuel.private.csv", "data/fuel.csv"]),
+    fetchFirst(["data/fuel.csv"]),
     fetch("data/maintenance.csv").then((r) => r.text()).catch(() => "date,odometer,service,category,cost,vendor,notes\n"),
     fetch("data/reminders.csv").then((r) => r.text()).catch(() => "title,category,due_date,due_odometer,interval_days,interval_miles,notes\n"),
   ]);
