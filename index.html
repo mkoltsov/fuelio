@@ -9,7 +9,7 @@
 <body>
   <header class="topbar">
     <div>
-      <h1>Fuel Ledger</h1>
+      <h1>The Matrix Fuel Report</h1>
       <p id="datasetStatus">Loading records</p>
     </div>
     <nav class="toolbar" aria-label="Data actions">
@@ -19,17 +19,16 @@
       </label>
       <button id="exportFuel" type="button">Export Fuel</button>
       <button id="exportBackup" type="button">Export Backup</button>
-      <button id="resetData" type="button">Reset</button>
+      <button id="resetData" type="button">Refresh Data</button>
     </nav>
   </header>
 
   <main class="layout">
     <aside class="sidebar" aria-label="Views">
-      <button class="navItem active" data-view="dashboard" type="button">Dashboard</button>
+      <button class="navItem active" data-view="dashboard" type="button">Report</button>
       <button class="navItem" data-view="fuel" type="button">Fuel</button>
       <button class="navItem" data-view="maintenance" type="button">Maintenance</button>
       <button class="navItem" data-view="reminders" type="button">Reminders</button>
-      <button class="navItem" data-view="settings" type="button">Settings</button>
     </aside>
 
     <section class="workspace">
@@ -42,23 +41,33 @@
           <div class="segmented" role="group" aria-label="Chart metric">
             <button class="segment active" data-chart="spend" type="button">Spend</button>
             <button class="segment" data-chart="price" type="button">Price</button>
-            <button class="segment" data-chart="gallons" type="button">Gallons</button>
-            <button class="segment" data-chart="mpg" type="button">MPG</button>
+            <button class="segment" data-chart="liters" type="button">Liters</button>
+            <button class="segment" data-chart="consumption" type="button">L/100 km</button>
             <button class="segment" data-chart="odometer" type="button">Odometer</button>
           </div>
         </div>
 
         <div class="metricsGrid" id="metricsGrid"></div>
 
-        <section class="panel">
-          <div class="panelHeader">
-            <h3 id="chartTitle">Monthly Fuel Spend</h3>
-            <span id="chartSubtitle"></span>
-          </div>
-          <div class="chartWrap">
-            <canvas id="trendChart" width="980" height="320" aria-label="Monthly trend chart"></canvas>
-          </div>
-        </section>
+        <div class="reportGrid">
+          <section class="panel chartPanel">
+            <div class="panelHeader">
+              <h3 id="chartTitle">Monthly Consumption</h3>
+              <span id="chartSubtitle"></span>
+            </div>
+            <div class="chartWrap">
+              <canvas id="trendChart" width="980" height="320" aria-label="Monthly trend chart"></canvas>
+            </div>
+          </section>
+
+          <section class="panel insightPanel">
+            <div class="panelHeader">
+              <h3>Signals</h3>
+              <span>public data</span>
+            </div>
+            <div id="qualityList" class="qualityList"></div>
+          </section>
+        </div>
 
         <section class="panel">
           <div class="panelHeader">
@@ -68,7 +77,7 @@
           <div class="tableWrap compact">
             <table>
               <thead>
-                <tr><th>Date</th><th>Odometer</th><th>Gallons</th><th>Price</th><th>Total</th></tr>
+                <tr><th>Date</th><th>Odometer</th><th>Liters</th><th>Price</th><th>L/100 km</th><th>Total</th></tr>
               </thead>
               <tbody id="recentFuelRows"></tbody>
             </table>
@@ -80,9 +89,8 @@
         <div class="sectionHeader">
           <div>
             <h2 id="fuelTitle">Fuel Records</h2>
-            <p>LubeLogger-style CSV fields with sanitized fuel history.</p>
+            <p>Public fuel history with metric consumption.</p>
           </div>
-          <button id="addFuelRow" type="button">Add Fuel</button>
         </div>
         <div class="filters">
           <input id="fuelSearch" type="search" placeholder="Search date, note, tag, source">
@@ -91,7 +99,7 @@
           <table>
             <thead>
               <tr>
-                <th>Date</th><th>Odometer</th><th>Gallons</th><th>Total</th><th>Price</th><th>MPG</th><th>Source</th><th>Notes</th>
+                <th>Date</th><th>Odometer</th><th>Liters</th><th>Total</th><th>Price</th><th>L/100 km</th><th>Source</th><th>Notes</th>
               </tr>
             </thead>
             <tbody id="fuelRows"></tbody>
@@ -103,9 +111,8 @@
         <div class="sectionHeader">
           <div>
             <h2 id="maintenanceTitle">Maintenance</h2>
-            <p>Service records stored in `data/maintenance.csv` or browser edits.</p>
+            <p>Service records from `data/maintenance.csv`.</p>
           </div>
-          <button id="addMaintenanceRow" type="button">Add Service</button>
         </div>
         <div class="tableWrap">
           <table>
@@ -123,24 +130,8 @@
             <h2 id="remindersTitle">Reminders</h2>
             <p>Due dates and odometer-based intervals.</p>
           </div>
-          <button id="addReminderRow" type="button">Add Reminder</button>
         </div>
         <div id="reminderList" class="reminderList"></div>
-      </section>
-
-      <section id="settings" class="view" aria-labelledby="settingsTitle">
-        <div class="sectionHeader">
-          <div>
-            <h2 id="settingsTitle">Settings</h2>
-            <p id="settingsStatus">Saved in this browser</p>
-          </div>
-        </div>
-        <div class="settingsGrid">
-          <label>Vehicle name <input id="vehicleName" type="text" value="Primary vehicle"></label>
-          <label>Distance unit <select id="distanceUnit"><option value="mi">miles</option><option value="km">kilometers</option></select></label>
-          <label>Fuel unit <select id="fuelUnit"><option value="gal">gallons</option><option value="L">liters</option></select></label>
-          <label>Currency <input id="currencySymbol" type="text" value="$" maxlength="3"></label>
-        </div>
       </section>
     </section>
   </main>
