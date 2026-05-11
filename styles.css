@@ -336,6 +336,42 @@ select:focus-visible,
   width: 100%;
 }
 
+.chartTooltip {
+  background: rgba(15, 19, 23, 0.96);
+  border: 1px solid #46535f;
+  border-radius: 7px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  color: var(--ink);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+  left: 0;
+  max-width: min(280px, calc(100vw - 20px));
+  opacity: 0;
+  padding: 9px 10px;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  transform: translateY(3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 20;
+}
+
+.chartTooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.chartTooltip strong {
+  color: #f8fbff;
+  font-size: 13px;
+}
+
+.chartTooltip span {
+  color: #cbd4df;
+  display: block;
+}
+
 .qualityList {
   display: grid;
   gap: 10px;

@@ -175,6 +175,96 @@ function formatMonth(value) {
   return date ? date.toLocaleDateString(undefined, { month: "short", year: "2-digit" }) : value;
 }
 
+function chartTooltip() {
+  let tooltip = el("chartTooltip");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "chartTooltip";
+    tooltip.className = "chartTooltip";
+    tooltip.setAttribute("role", "status");
+    document.body.append(tooltip);
+  }
+  return tooltip;
+}
+
+function hideChartTooltip() {
+  const tooltip = el("chartTooltip");
+  if (tooltip) tooltip.classList.remove("visible");
+}
+
+function tooltipHtml(point) {
+  const lines = point.lines || [];
+  return [
+    `<strong>${point.title || ""}</strong>`,
+    ...lines.map((line) => `<span>${line}</span>`),
+  ].join("");
+}
+
+function positionChartTooltip(event, tooltip) {
+  const gap = 14;
+  const rect = tooltip.getBoundingClientRect();
+  let left = event.clientX + gap;
+  let top = event.clientY + gap;
+  if (left + rect.width > window.innerWidth - 8) left = event.clientX - rect.width - gap;
+  if (top + rect.height > window.innerHeight - 8) top = event.clientY - rect.height - gap;
+  tooltip.style.left = `${Math.max(8, left)}px`;
+  tooltip.style.top = `${Math.max(8, top)}px`;
+}
+
+function hitChartPoint(point, x, y) {
+  if (point.type === "rect") {
+    return x >= point.x && x <= point.x + point.w && y >= point.y && y <= point.y + point.h;
+  }
+  const radius = point.radius || 9;
+  return Math.hypot(x - point.x, y - point.y) <= radius;
+}
+
+function nearestChartPoint(points, x, y) {
+  const hits = points.filter((point) => hitChartPoint(point, x, y));
+  if (!hits.length) return null;
+  return hits.sort((a, b) => {
+    const ax = a.type === "rect" ? a.x + a.w / 2 : a.x;
+    const ay = a.type === "rect" ? a.y + a.h / 2 : a.y;
+    const bx = b.type === "rect" ? b.x + b.w / 2 : b.x;
+    const by = b.type === "rect" ? b.y + b.h / 2 : b.y;
+    return Math.hypot(x - ax, y - ay) - Math.hypot(x - bx, y - by);
+  })[0];
+}
+
+function bindChartTooltip(canvas) {
+  if (canvas.dataset.tooltipBound === "1") return;
+  canvas.dataset.tooltipBound = "1";
+  canvas.addEventListener("mousemove", (event) => {
+    const points = canvas.__chartPoints || [];
+    if (!points.length) {
+      hideChartTooltip();
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const point = nearestChartPoint(points, event.clientX - rect.left, event.clientY - rect.top);
+    if (!point) {
+      hideChartTooltip();
+      canvas.style.cursor = "";
+      return;
+    }
+    const tooltip = chartTooltip();
+    tooltip.innerHTML = tooltipHtml(point);
+    tooltip.classList.add("visible");
+    positionChartTooltip(event, tooltip);
+    canvas.style.cursor = "crosshair";
+  });
+  canvas.addEventListener("mouseleave", () => {
+    hideChartTooltip();
+    canvas.style.cursor = "";
+  });
+}
+
+function registerChartPoints(canvas, points) {
+  if (!canvas) return;
+  canvas.__chartPoints = points || [];
+  bindChartTooltip(canvas);
+}
+
 function pricePerLiterFor(record) {
   const litersValue = litersFromGallons(record.gallons);
   return litersValue ? number(record.cost) / litersValue : 0;
@@ -661,7 +751,10 @@ function drawChart() {
   const subtitleMap = { spend: "receipt totals", price: "weighted average per liter", liters: "liters purchased", consumption: "liters per 100 km", odometer: "latest reading each month" };
   el("chartTitle").textContent = titleMap[metric];
   el("chartSubtitle").textContent = subtitleMap[metric];
-  if (!data.length) return;
+  if (!data.length) {
+    registerChartPoints(canvas, []);
+    return;
+  }
   const values = data.map((d) => d[metric]);
   const plottedValues = metric === "odometer" ? values.filter(Boolean) : values;
   const max = Math.max(...plottedValues, 1);
@@ -681,6 +774,7 @@ function drawChart() {
   ctx.stroke();
   const barGap = 4;
   const barW = Math.max(8, plotW / data.length - barGap);
+  const points = [];
   data.forEach((d, index) => {
     const value = d[metric];
     if (metric === "odometer" && !value) return;
@@ -689,6 +783,20 @@ function drawChart() {
     const y = pad.top + plotH - h;
     ctx.fillStyle = metric === "price" ? "#e3a04f" : metric === "liters" || metric === "consumption" ? "#36b37e" : metric === "odometer" ? "#8f7cf4" : "#4aa3ff";
     ctx.fillRect(x, y, barW, h);
+    const valueLabel = metric === "spend" ? money(value)
+      : metric === "price" ? formatPricePerLiter(value)
+        : metric === "liters" ? formatLiters(value)
+          : metric === "consumption" ? formatConsumption(value)
+            : formatOdometer(value);
+    points.push({
+      type: "rect",
+      x,
+      y: Math.min(y, height - pad.bottom - 3),
+      w: barW,
+      h: Math.max(6, h),
+      title: formatMonth(d.month),
+      lines: [titleMap[metric], valueLabel],
+    });
     if (index % Math.ceil(data.length / 8) === 0) {
       ctx.fillStyle = "#cbd4df";
       ctx.font = "12px sans-serif";
@@ -704,6 +812,7 @@ function drawChart() {
     const label = metric === "spend" || metric === "price" ? money(value) : metric === "consumption" ? value.toFixed(1) : Math.round(value).toLocaleString();
     ctx.fillText(label, pad.left - 8, pad.top + (plotH * i) / 4 + 4);
   }
+  registerChartPoints(canvas, points);
 }
 
 function setupStatCanvas(id) {
@@ -776,6 +885,7 @@ function drawLineAreaChart(id, rows, options) {
     .filter((row) => row.value > 0);
   if (!data.length) {
     drawEmptyChart(chart, "No chart data");
+    registerChartPoints(chart.canvas, []);
     return;
   }
   const pad = { left: options.leftPad || 54, right: 14, top: 18, bottom: 34 };
@@ -837,6 +947,13 @@ function drawLineAreaChart(id, rows, options) {
     ctx.textAlign = "left";
     ctx.fillText(`avg ${options.formatY(average)}`, pad.left + 8, y - 6);
   }
+  registerChartPoints(chart.canvas, data.map((point, index) => ({
+    x: chartX(index, data.length, pad, width),
+    y: chartY(point.value, min, max, pad, height),
+    radius: 12,
+    title: options.tooltipTitle ? options.tooltipTitle(point.row) : options.label(point.row),
+    lines: options.tooltipLines ? options.tooltipLines(point.row, point.value) : [options.formatY(point.value)],
+  })));
 }
 
 function drawMonthlyCostChart() {
@@ -846,6 +963,7 @@ function drawMonthlyCostChart() {
   const data = monthlyData().slice(-18);
   if (!data.length) {
     drawEmptyChart(chart, "No monthly data");
+    registerChartPoints(chart.canvas, []);
     return;
   }
   const pad = { left: 54, right: 18, top: 18, bottom: 34 };
@@ -856,6 +974,7 @@ function drawMonthlyCostChart() {
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
   const barW = Math.max(7, plotW / data.length - 5);
+  const points = [];
   data.forEach((row, index) => {
     const x = pad.left + (plotW * index) / data.length + 2.5;
     const h = (row.spend / (maxSpend * 1.18)) * plotH;
@@ -865,6 +984,15 @@ function drawMonthlyCostChart() {
     gradient.addColorStop(1, "#25618f");
     ctx.fillStyle = gradient;
     ctx.fillRect(x, y, barW, h);
+    points.push({
+      type: "rect",
+      x,
+      y,
+      w: barW,
+      h: Math.max(6, h),
+      title: formatMonth(row.month),
+      lines: [`Spend: ${money(row.spend)}`, `Liters: ${formatLiters(row.liters)}`],
+    });
   });
   ctx.beginPath();
   data.forEach((row, index) => {
@@ -883,11 +1011,19 @@ function drawMonthlyCostChart() {
     ctx.beginPath();
     ctx.arc(x, y, 2.8, 0, Math.PI * 2);
     ctx.fill();
+    points.push({
+      x,
+      y,
+      radius: 12,
+      title: formatMonth(row.month),
+      lines: [`Fill-ups: ${row.count}`, `Spend: ${money(row.spend)}`],
+    });
   });
   ctx.textAlign = "left";
   ctx.fillText("bars: spend", pad.left + 4, pad.top + 10);
   ctx.fillStyle = "#ffdf8a";
   ctx.fillText("line: fill-ups", pad.left + 96, pad.top + 10);
+  registerChartPoints(chart.canvas, points);
 }
 
 function drawDashboardMonthlyCostChart() {
@@ -897,6 +1033,7 @@ function drawDashboardMonthlyCostChart() {
   const monthly = monthlyData().slice(-12);
   if (!monthly.length) {
     drawEmptyChart(chart, "No monthly cost data");
+    registerChartPoints(chart.canvas, []);
     return;
   }
   const savingsByMonth = new Map(costcoSavingsStats().monthly.map((row) => [row.month, row.savings]));
@@ -909,17 +1046,37 @@ function drawDashboardMonthlyCostChart() {
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
   const barW = Math.max(8, plotW / monthly.length - 8);
+  const points = [];
   monthly.forEach((row, index) => {
     const x = pad.left + (plotW * index) / monthly.length + 4;
     const spendHeight = (row.spend / scaleMax) * plotH;
     const spendY = pad.top + plotH - spendHeight;
     ctx.fillStyle = "#4aa3ff";
     ctx.fillRect(x, spendY, barW, spendHeight);
+    points.push({
+      type: "rect",
+      x,
+      y: spendY,
+      w: barW,
+      h: Math.max(6, spendHeight),
+      title: formatMonth(row.month),
+      lines: [`Fuel cost: ${money(row.spend)}`, `Fill-ups: ${row.count}`, `Liters: ${formatLiters(row.liters)}`],
+    });
     const savings = savingsByMonth.get(row.month) || 0;
     if (savings) {
       const savingsHeight = Math.max(3, (savings / scaleMax) * plotH);
+      const savingsY = spendY - savingsHeight - 3;
       ctx.fillStyle = "#36b37e";
-      ctx.fillRect(x, spendY - savingsHeight - 3, barW, savingsHeight);
+      ctx.fillRect(x, savingsY, barW, savingsHeight);
+      points.push({
+        type: "rect",
+        x,
+        y: savingsY,
+        w: barW,
+        h: Math.max(8, savingsHeight),
+        title: formatMonth(row.month),
+        lines: [`Estimated Costco savings: ${money(savings)}`],
+      });
     }
   });
   ctx.fillStyle = "#cbd4df";
@@ -927,6 +1084,7 @@ function drawDashboardMonthlyCostChart() {
   ctx.fillText("blue: paid fuel cost", pad.left + 4, pad.top + 10);
   ctx.fillStyle = "#a6f2c9";
   ctx.fillText("green: estimated Costco savings", pad.left + 138, pad.top + 10);
+  registerChartPoints(chart.canvas, points);
 }
 
 function drawVehicleValueChart() {
@@ -938,6 +1096,7 @@ function drawVehicleValueChart() {
     .map((row) => ({ row, estimate: vehicleValueEstimate(row.odometer, row.date) }));
   if (!data.length) {
     drawEmptyChart(chart, "No odometer history");
+    registerChartPoints(chart.canvas, []);
     return;
   }
   const pad = { left: 58, right: 18, top: 18, bottom: 34 };
@@ -996,6 +1155,34 @@ function drawVehicleValueChart() {
   ctx.fillText(`private ${moneyRange(latest.privateLow, latest.privateHigh)}`, pad.left + 4, pad.top + 10);
   ctx.fillStyle = "#ffdf8a";
   ctx.fillText(`trade ${moneyRange(latest.tradeLow, latest.tradeHigh)}`, pad.left + 154, pad.top + 10);
+  const points = data.flatMap((point, index) => {
+    const x = chartX(index, data.length, pad, width);
+    const privateMid = (point.estimate.privateLow + point.estimate.privateHigh) / 2;
+    const tradeMid = (point.estimate.tradeLow + point.estimate.tradeHigh) / 2;
+    return [
+      {
+        x,
+        y: chartY(privateMid, min, max, pad, height),
+        radius: 12,
+        title: dateOnly(point.row.date),
+        lines: [
+          `Private value: ${moneyRange(point.estimate.privateLow, point.estimate.privateHigh)}`,
+          `Odometer: ${formatOdometer(point.row.odometer)}`,
+        ],
+      },
+      {
+        x,
+        y: chartY(tradeMid, min, max, pad, height),
+        radius: 12,
+        title: dateOnly(point.row.date),
+        lines: [
+          `Trade value: ${moneyRange(point.estimate.tradeLow, point.estimate.tradeHigh)}`,
+          `Odometer: ${formatOdometer(point.row.odometer)}`,
+        ],
+      },
+    ];
+  });
+  registerChartPoints(chart.canvas, points);
 }
 
 function drawStatsCharts() {
@@ -1006,6 +1193,12 @@ function drawStatsCharts() {
     color: "#36b37e",
     fill: "rgba(54, 179, 126, 0.28)",
     average: true,
+    tooltipTitle: (row) => dateOnly(row.record.date),
+    tooltipLines: (row, value) => [
+      `Consumption: ${formatConsumption(value)}`,
+      `Distance: ${formatKm(row.km)}`,
+      `Fuel: ${formatLiters(row.liters)}`,
+    ],
   });
   drawMonthlyCostChart();
   drawLineAreaChart("statPriceChart", monthlyData(), {
@@ -1015,6 +1208,12 @@ function drawStatsCharts() {
     color: "#e3a04f",
     fill: "rgba(227, 160, 79, 0.28)",
     average: true,
+    tooltipTitle: (row) => formatMonth(row.month),
+    tooltipLines: (row, value) => [
+      `Price: ${formatPricePerLiter(value)}`,
+      `Spend: ${money(row.spend)}`,
+      `Liters: ${formatLiters(row.liters)}`,
+    ],
   });
   drawLineAreaChart("statOdometerChart", fuelRecords().filter((row) => number(row.odometer) > 0), {
     value: (row) => row.odometer,
@@ -1023,6 +1222,11 @@ function drawStatsCharts() {
     color: "#8f7cf4",
     fill: "rgba(143, 124, 244, 0.26)",
     leftPad: 70,
+    tooltipTitle: (row) => dateOnly(row.date),
+    tooltipLines: (row, value) => [
+      `Odometer: ${formatOdometer(value)}`,
+      `Fuel cost: ${money(row.cost)}`,
+    ],
   });
   drawVehicleValueChart();
 }
