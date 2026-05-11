@@ -108,8 +108,8 @@ jobs:
                   liters = gallons * GALLON_TO_LITER
               if odometer <= 0 or gallons <= 0 or cost < 0:
                   raise SystemExit("Fill-up requires odometer, fuel volume, and non-negative cost")
-              price_liter = cost / liters if liters else 0
-              notes = clean_text(entry.get("notes")) or (f"{price_liter:.3f}/L" if price_liter else "manual entry")
+              price_gallon = cost / gallons if gallons else 0
+              notes = clean_text(entry.get("notes")) or (f"{price_gallon:.3f}/gal" if price_gallon else "manual entry")
               row = {
                   "date": date,
                   "odometer": str(odometer),

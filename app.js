@@ -529,7 +529,7 @@ function fillupPayload() {
     entry: {
       date: formValue("fillupDate"),
       odometer: Math.round(number(formValue("fillupOdometer"))),
-      liters: number(formValue("fillupLiters")),
+      gallons: number(formValue("fillupGallons")),
       cost: number(formValue("fillupCost")),
       notes: formValue("fillupNotes"),
     },
@@ -556,7 +556,7 @@ function maintenancePayload() {
 }
 
 function isValidFillup(payload) {
-  return Boolean(payload.entry.date && payload.entry.odometer > 0 && payload.entry.liters > 0 && payload.entry.cost >= 0);
+  return Boolean(payload.entry.date && payload.entry.odometer > 0 && payload.entry.gallons > 0 && payload.entry.cost >= 0);
 }
 
 function isValidMaintenance(payload) {
@@ -590,7 +590,7 @@ function setIssueLink(linkId, statusId, payload, valid, validMessage, invalidMes
 function updateEntryLinks() {
   const fillup = fillupPayload();
   const maintenance = maintenancePayload();
-  setIssueLink("saveFillup", "fillupStatus", fillup, isValidFillup(fillup), "Draft saved here; open GitHub to commit this fill-up.", "Date, odometer, liters, and total cost are required.");
+  setIssueLink("saveFillup", "fillupStatus", fillup, isValidFillup(fillup), "Draft saved here; open GitHub to commit this fill-up.", "Date, odometer, gallons, and total cost are required.");
   setIssueLink("saveMaintenance", "maintenanceStatus", maintenance, isValidMaintenance(maintenance), "Draft saved here; open GitHub to commit this cost.", "Date, service, and cost are required.");
 }
 
@@ -609,7 +609,7 @@ function loadEntryDrafts() {
   const maintenance = drafts.maintenance || {};
   setFormValue("fillupDate", fillup.date || todayISO());
   setFormValue("fillupOdometer", fillup.odometer);
-  setFormValue("fillupLiters", fillup.liters);
+  setFormValue("fillupGallons", fillup.gallons || (fillup.liters ? (number(fillup.liters) / GALLON_TO_LITER).toFixed(3) : ""));
   setFormValue("fillupCost", fillup.cost);
   setFormValue("fillupNotes", fillup.notes);
   setFormValue("maintenanceDate", maintenance.date || todayISO());

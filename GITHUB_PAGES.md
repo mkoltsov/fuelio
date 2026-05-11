@@ -45,7 +45,7 @@ The public CSV keeps dates, odometer readings, gallons, total cost, generic sour
 
 The `Add Entry` view follows the weekly meal-plan pattern:
 
-1. Enter a fill-up or maintenance cost.
+1. Enter a fill-up in gallons with the odometer in miles, or enter a maintenance cost.
 2. The draft is stored in that browser's localStorage.
 3. Click the GitHub save button.
 4. Open the prefilled issue.
