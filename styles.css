@@ -456,25 +456,76 @@ th.numeric {
   cursor: not-allowed;
 }
 
-.reminderList {
+.scheduleSummary {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  margin-bottom: 14px;
 }
 
-.reminder {
+.scheduleCard {
   background: var(--surface);
   border: 1px solid var(--line);
   border-left: 4px solid var(--amber);
   border-radius: 8px;
   display: grid;
-  gap: 6px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
   padding: 12px;
 }
 
-.reminder strong {
+.scheduleCardTop {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.scheduleCard strong {
   display: block;
-  font-size: 15px;
+  font-size: 18px;
+}
+
+.scheduleCardCost {
+  color: #f8fbff;
+  font-size: 24px;
+  font-weight: 760;
+  line-height: 1.15;
+}
+
+.scheduleCard small,
+.tableHint {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.statusPill {
+  background: #2c3540;
+  border: 1px solid #46535f;
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.statusPill.verify {
+  border-color: var(--orange);
+  color: #ffd5ad;
+}
+
+.statusPill.approaching {
+  border-color: var(--amber);
+  color: #ffe3a0;
+}
+
+.statusPill.upcoming {
+  border-color: var(--green);
+  color: #a6f2c9;
 }
 
 .empty {
@@ -497,6 +548,10 @@ th.numeric {
 
   .entryGrid {
     grid-template-columns: 1fr;
+  }
+
+  .scheduleSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -560,6 +615,10 @@ th.numeric {
   }
 
   .entryForm {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduleSummary {
     grid-template-columns: 1fr;
   }
 }

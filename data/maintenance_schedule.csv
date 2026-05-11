@@ -1,0 +1,38 @@
+procedure,action,first_due_miles,repeat_miles,condition,cost_low,cost_high,cost_note,billable
+Replace engine oil and filter,Replace,5000,5000,Standard,60,110,North Carolina quick-lube or independent-shop oil service,1
+Rotate tires,Rotate,5000,5000,Standard,20,70,Raleigh rotation price and national routine-maintenance range,1
+Visually inspect brake linings/drums and brake pads/discs,Inspect,5000,5000,Standard,0,40,Usually bundled with oil service or rotation,0
+Inspect ball joints and dust covers,Inspect,15000,15000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect brake lines and hoses,Inspect,15000,15000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect drive shaft boots,Inspect,15000,15000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect engine coolant,Inspect,15000,15000,Standard,0,30,Usually bundled in multi-point inspection,0
+Inspect exhaust pipes and mountings,Inspect,15000,15000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect radiator and condenser,Inspect,15000,15000,Standard,0,30,Usually bundled in multi-point inspection,0
+Inspect rear differential oil (4WD),Inspect,15000,15000,4WD,0,40,4WD only; usually bundled in multi-point inspection,0
+Inspect steering gear box,Inspect,15000,15000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect steering linkage and boots,Inspect,15000,15000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect transfer case oil (4WD),Inspect,15000,15000,4WD,0,40,4WD only; usually bundled in multi-point inspection,0
+Re-torque propeller shaft bolt (4WD),Torque,15000,15000,4WD,40,100,4WD only; standalone labor if not bundled,1
+Tighten drive shaft bolt,Tighten,15000,15000,Standard,0,60,Often bundled with scheduled inspection,0
+Replace cabin air filter,Replace,30000,30000,Standard,67,119,RepairPal Toyota Matrix 2009 and 2026 average service ranges,1
+Replace engine air filter,Replace,30000,30000,Standard,61,85,RepairPal 2009 Toyota Matrix air-filter service range,1
+Inspect front differential oil,Inspect,30000,30000,Manual transmission/if equipped,0,40,If equipped; usually bundled in multi-point inspection,0
+Inspect fuel lines/connections fuel tank band and vapor vent hoses,Inspect,30000,30000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect fuel tank cap gasket,Inspect,30000,30000,Standard,0,20,Usually bundled in multi-point inspection,0
+Inspect transmission fluid or oil,Inspect,30000,30000,Standard,0,40,Usually bundled in multi-point inspection,0
+Inspect drive belts,Inspect,60000,15000,Standard,0,40,Replace if damaged; inspection usually bundled,0
+Inspect engine valve clearance (2AZ-FE only),Inspect,60000,60000,2.4L 2AZ-FE only,120,250,Only if equipped; diagnostic labor estimate,1
+Replace engine coolant,Replace,100000,50000,Standard,246,326,RepairPal 2009 Toyota Matrix coolant-change estimate,1
+Replace spark plugs,Replace,120000,120000,Standard,309,386,KBB 2009 Toyota Matrix Charlotte NC fair repair range,1
+Inspect engine air filter (dusty roads),Inspect,5000,5000,Dirt/dust roads,0,20,Special operating condition; usually bundled,0
+Inspect ball joints and dust covers (dusty roads),Inspect,5000,5000,Dirt/dust roads,0,40,Special operating condition; usually bundled,0
+Inspect drive shaft boots (dusty roads),Inspect,5000,5000,Dirt/dust roads,0,40,Special operating condition; usually bundled,0
+Inspect steering linkage and boots (dusty roads),Inspect,5000,5000,Dirt/dust roads,0,40,Special operating condition; usually bundled,0
+Re-torque propeller shaft bolt (4WD special),Torque,5000,5000,4WD dirt/towing,40,100,Special operating condition; standalone labor if not bundled,1
+Tighten nuts and bolts on chassis,Tighten,5000,5000,Dirt/dust roads,40,120,Special operating condition; shop labor estimate,1
+Tighten nuts and bolts on chassis and body,Tighten,5000,5000,Towing,40,120,Special operating condition; shop labor estimate,1
+Replace rear differential oil (4WD towing),Replace,15000,30000,4WD towing,100,180,Special operating condition; 4WD only,1
+Replace transfer case oil (4WD towing),Replace,15000,30000,4WD towing,100,180,Special operating condition; 4WD only,1
+Replace front differential oil (manual/towing),Replace,30000,30000,Manual transmission/towing,90,160,Special operating condition; if equipped,1
+Replace manual transmission oil (towing),Replace,30000,60000,Manual transmission/towing,80,180,Special operating condition; if equipped,1
+Replace transmission fluid or oil (towing),Replace,60000,60000,Towing,90,360,Special operating condition; North Carolina transmission-service range,1

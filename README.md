@@ -14,6 +14,7 @@ Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger record vi
 - `data/Fuelio_latest.csv` - local newest Fuelio backup pulled from Gmail, ignored by git
 - `data/maintenance.csv` - maintenance records
 - `data/reminders.csv` - reminder records
+- `data/maintenance_schedule.csv` - 2009 Toyota Matrix mileage schedule and approximate North Carolina procedure costs
 - `.github/workflows/update-ledger-entry.yml` - owner-only issue workflow that commits manual fill-ups and maintenance costs
 - `scripts/merge_fuelio_costco.py` - rebuilds private and public fuel ledgers
 - `scripts/update_costco_fillups.py` - fetches new Costco gas receipts through the local managed Brave session
@@ -36,6 +37,8 @@ python3 scripts/merge_fuelio_costco.py
 The merge writes `data/fuel.private.csv` for local use and `data/fuel.csv` for publishing. It prefers Fuelio odometer data when a Costco receipt matches by date, gallons, and total cost. Unmatched Costco receipts remain in the ledger without odometer values.
 
 Manual public fill-ups submitted from the page use gallons and odometer miles. They are stored in `data/manual_fuel.csv`; the merge includes them so scheduled Costco/Fuelio rebuilds do not discard them. Fuelio maintenance-cost rows are imported from the backup when the `## Costs` section contains records.
+
+The Schedule view uses the local 2009 Toyota Matrix scheduled-maintenance guide and the latest public odometer to show upcoming 5,000-mile service items. Cost ranges are approximate North Carolina independent-shop estimates and are intended for planning, not as quotes.
 
 ## Scheduled Costco Updates
 

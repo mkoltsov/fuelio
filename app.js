@@ -11,6 +11,7 @@ const state = {
   fuel: [],
   maintenance: [],
   reminders: [],
+  schedule: [],
   chartMetric: "consumption",
 };
 
@@ -72,6 +73,18 @@ function number(value) {
 
 function money(value) {
   return `${CURRENCY_SYMBOL}${number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function moneyEstimate(value) {
+  return `${CURRENCY_SYMBOL}${Math.round(number(value)).toLocaleString()}`;
+}
+
+function moneyRange(low, high) {
+  const lo = Math.round(number(low));
+  const hi = Math.round(number(high));
+  if (!lo && !hi) return "$0";
+  if (lo === hi || !hi) return moneyEstimate(lo || hi);
+  return `${moneyEstimate(lo)}-${moneyEstimate(hi)}`;
 }
 
 function litersFromGallons(value) {
@@ -151,6 +164,17 @@ function normalizeFuel(record) {
   };
 }
 
+function normalizeSchedule(row) {
+  return {
+    ...row,
+    first_due_miles: Math.round(number(row.first_due_miles)),
+    repeat_miles: Math.round(number(row.repeat_miles)),
+    cost_low: number(row.cost_low),
+    cost_high: number(row.cost_high),
+    billable: String(row.billable) === "1",
+  };
+}
+
 function updateStorageStatus(message) {
   document.querySelectorAll(".entryStatus").forEach((node) => {
     node.textContent = message;
@@ -217,14 +241,16 @@ async function loadSeedData() {
     }
     throw new Error(`Missing data file: ${paths.join(" or ")}`);
   };
-  const [fuelText, maintenanceText, remindersText] = await Promise.all([
+  const [fuelText, maintenanceText, remindersText, scheduleText] = await Promise.all([
     fetchFirst(["data/fuel.csv"]),
     fetch(`data/maintenance.csv?v=${Date.now()}`, { cache: "no-store" }).then((r) => r.text()).catch(() => "date,odometer,service,category,cost,vendor,notes\n"),
     fetch(`data/reminders.csv?v=${Date.now()}`, { cache: "no-store" }).then((r) => r.text()).catch(() => "title,category,due_date,due_odometer,interval_days,interval_miles,notes\n"),
+    fetch(`data/maintenance_schedule.csv?v=${Date.now()}`, { cache: "no-store" }).then((r) => r.text()).catch(() => "procedure,action,first_due_miles,repeat_miles,condition,cost_low,cost_high,cost_note,billable\n"),
   ]);
   state.fuel = parseCSV(fuelText).map(normalizeFuel);
   state.maintenance = parseCSV(maintenanceText);
   state.reminders = parseCSV(remindersText);
+  state.schedule = parseCSV(scheduleText).map(normalizeSchedule);
 }
 
 function metrics() {
@@ -270,6 +296,76 @@ function maintenanceMetrics() {
     totalCost,
     latest,
   };
+}
+
+function currentOdometer() {
+  return number(metrics().latestOdometer?.odometer);
+}
+
+function occurrenceMiles(row, odometer, lookBehind = 5000, lookAhead = 10000) {
+  const first = number(row.first_due_miles);
+  const repeat = number(row.repeat_miles);
+  if (!first || !odometer) return [];
+  const min = Math.max(0, odometer - lookBehind);
+  const max = odometer + lookAhead;
+  if (!repeat) return first >= min && first <= max ? [first] : [];
+  let due = first;
+  if (min > first) {
+    due = first + Math.floor((min - first) / repeat) * repeat;
+  }
+  while (due < min) due += repeat;
+  const miles = [];
+  while (due <= max) {
+    miles.push(due);
+    due += repeat;
+  }
+  return miles;
+}
+
+function scheduleStatus(dueMiles, odometer) {
+  const delta = Math.round(dueMiles - odometer);
+  if (delta <= 0) return { label: "Verify", detail: `${Math.abs(delta).toLocaleString()} mi past` };
+  if (delta <= 2000) return { label: "Approaching", detail: `${delta.toLocaleString()} mi left` };
+  return { label: "Upcoming", detail: `${delta.toLocaleString()} mi left` };
+}
+
+function scheduleOccurrences({ standardOnly = true, lookBehind = 5000, lookAhead = 10000 } = {}) {
+  const odometer = currentOdometer();
+  const rows = standardOnly ? state.schedule.filter((row) => row.condition === "Standard") : state.schedule;
+  return rows.flatMap((row) => occurrenceMiles(row, odometer, lookBehind, lookAhead).map((dueMiles) => ({
+    row,
+    dueMiles,
+    status: scheduleStatus(dueMiles, odometer),
+  }))).sort((a, b) => a.dueMiles - b.dueMiles || a.row.procedure.localeCompare(b.row.procedure));
+}
+
+function scheduleGroups() {
+  const groups = new Map();
+  for (const item of scheduleOccurrences({ standardOnly: true })) {
+    if (!groups.has(item.dueMiles)) groups.set(item.dueMiles, []);
+    groups.get(item.dueMiles).push(item);
+  }
+  return [...groups.entries()].map(([dueMiles, items]) => {
+    const billable = items.filter((item) => item.row.billable);
+    return {
+      dueMiles,
+      items,
+      status: items[0]?.status || { label: "Upcoming", detail: "" },
+      costLow: billable.reduce((sum, item) => sum + number(item.row.cost_low), 0),
+      costHigh: billable.reduce((sum, item) => sum + number(item.row.cost_high), 0),
+    };
+  }).sort((a, b) => a.dueMiles - b.dueMiles);
+}
+
+function nextScheduleGroup() {
+  const odometer = currentOdometer();
+  return scheduleGroups().find((group) => group.dueMiles >= odometer) || scheduleGroups()[0];
+}
+
+function scheduleCostLabel(row) {
+  const range = moneyRange(row.cost_low, row.cost_high);
+  if (row.billable) return range;
+  return number(row.cost_high) ? `${range} if separate` : "Usually bundled";
 }
 
 function monthlyData() {
@@ -393,6 +489,7 @@ function renderQuality() {
   const maintenance = maintenanceMetrics();
   const economyRows = fuelWithEconomy().filter((r) => r.consumption > 0);
   const latestInterval = economyRows.at(-1);
+  const nextService = nextScheduleGroup();
   const missingRecent = state.fuel
     .slice()
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
@@ -401,6 +498,7 @@ function renderQuality() {
     .map((r) => dateOnly(r.date));
   el("qualityList").innerHTML = [
     ["Last interval", latestInterval ? formatConsumption(latestInterval.consumption) : "n/a", latestInterval ? `${formatKm(latestInterval.km)} since previous fill-up` : "Need odometer readings"],
+    ["Next service", nextService ? formatOdometer(nextService.dueMiles) : "n/a", nextService ? `${nextService.status.detail} · est ${moneyRange(nextService.costLow, nextService.costHigh)}` : "Maintenance schedule not loaded"],
     ["Latest maintenance", maintenance.latest?.service || "n/a", maintenance.latest ? `${dateOnly(maintenance.latest.date)} · ${money(maintenance.latest.cost)}` : "No maintenance costs in Fuelio backup"],
     ["Missing odometer", String(m.missingOdometer), missingRecent.length ? missingRecent.join(", ") : "Recent rows are complete"],
     ["Fresh data", dateOnly(m.latest?.date) || "n/a", "Loaded from data/fuel.csv on each visit"],
@@ -467,18 +565,54 @@ function renderMaintenance() {
   }
 }
 
-function renderReminders() {
-  const list = el("reminderList");
-  if (!state.reminders.length) {
-    list.innerHTML = `<div class="empty">No reminders</div>`;
+function renderSchedule() {
+  const summary = el("scheduleSummary");
+  const scheduleRows = el("scheduleRows");
+  const procedureCostRows = el("procedureCostRows");
+  if (!summary || !scheduleRows || !procedureCostRows) return;
+  const groups = scheduleGroups();
+  const occurrences = scheduleOccurrences({ standardOnly: true });
+  if (!state.schedule.length || !currentOdometer()) {
+    summary.innerHTML = `<div class="empty">No maintenance schedule or odometer loaded</div>`;
+    scheduleRows.innerHTML = `<tr><td class="empty" colspan="6">No upcoming maintenance can be calculated yet.</td></tr>`;
+    procedureCostRows.innerHTML = `<tr><td class="empty" colspan="7">No procedure cost data loaded.</td></tr>`;
     return;
   }
-  list.innerHTML = state.reminders.map((r) => `
-    <article class="reminder">
-      <div><strong>${r.title || "Untitled"}</strong><p>${r.category || "General"} · ${r.notes || ""}</p></div>
-      <span>${r.due_date || r.due_odometer || "No due target"}</span>
+  summary.innerHTML = groups.slice(0, 4).map((group) => `
+    <article class="scheduleCard">
+      <div class="scheduleCardTop">
+        <strong>${formatOdometer(group.dueMiles)}</strong>
+        <span class="statusPill ${group.status.label.toLowerCase()}">${group.status.label}</span>
+      </div>
+      <p>${group.status.detail}</p>
+      <div class="scheduleCardCost">${moneyRange(group.costLow, group.costHigh)}</div>
+      <small>${group.items.length} scheduled procedures; inspections are usually bundled.</small>
     </article>
   `).join("");
+  scheduleRows.innerHTML = occurrences.map((item) => `
+    <tr>
+      <td>${formatOdometer(item.dueMiles)}</td>
+      <td><span class="statusPill ${item.status.label.toLowerCase()}">${item.status.label}</span><small class="tableHint">${item.status.detail}</small></td>
+      <td>${item.row.procedure}</td>
+      <td>${item.row.condition}</td>
+      <td class="numeric">${scheduleCostLabel(item.row)}</td>
+      <td>${item.row.cost_note || ""}</td>
+    </tr>
+  `).join("");
+  procedureCostRows.innerHTML = state.schedule
+    .slice()
+    .sort((a, b) => (a.condition === "Standard" ? 0 : 1) - (b.condition === "Standard" ? 0 : 1) || a.first_due_miles - b.first_due_miles || a.procedure.localeCompare(b.procedure))
+    .map((row) => `
+      <tr>
+        <td>${row.action}</td>
+        <td>${row.procedure}</td>
+        <td>${row.condition}</td>
+        <td class="numeric">${formatOdometer(row.first_due_miles)}</td>
+        <td class="numeric">${row.repeat_miles ? `${row.repeat_miles.toLocaleString()} mi` : "one time"}</td>
+        <td class="numeric">${scheduleCostLabel(row)}</td>
+        <td>${row.cost_note || ""}</td>
+      </tr>
+    `).join("");
 }
 
 function syncChartControls() {
@@ -495,7 +629,7 @@ function renderAll() {
   renderQuality();
   renderFuelTable();
   renderMaintenance();
-  renderReminders();
+  renderSchedule();
 }
 
 function download(name, text, type = "text/csv") {

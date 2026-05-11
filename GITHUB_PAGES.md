@@ -55,6 +55,10 @@ Fill-ups are written to both `data/manual_fuel.csv` and `data/fuel.csv`. Mainten
 
 This requires GitHub Issues and Actions to be enabled for the repository.
 
+## Maintenance Schedule
+
+The `Schedule` view is read-only static data from `data/maintenance_schedule.csv`. It uses the latest public odometer reading to show nearby Toyota Matrix mileage intervals and approximate North Carolina procedure costs. Special operating conditions, such as 4WD, towing, dusty roads, or the 2AZ-FE engine, are listed in the full cost reference but are not included in the standard interval total.
+
 ## Publish Updated Sanitized Data
 
 After pulling new private inputs:

@@ -29,7 +29,7 @@
       <button class="navItem" data-view="addEntry" type="button">Add Entry</button>
       <button class="navItem" data-view="fuel" type="button">Fuel</button>
       <button class="navItem" data-view="maintenance" type="button">Maintenance</button>
-      <button class="navItem" data-view="reminders" type="button">Reminders</button>
+      <button class="navItem" data-view="reminders" type="button">Schedule</button>
     </aside>
 
     <section class="workspace">
@@ -185,11 +185,39 @@
       <section id="reminders" class="view" aria-labelledby="remindersTitle">
         <div class="sectionHeader">
           <div>
-            <h2 id="remindersTitle">Reminders</h2>
-            <p>Due dates and odometer-based intervals.</p>
+            <h2 id="remindersTitle">Maintenance Schedule</h2>
+            <p>2009 Toyota Matrix mileage schedule with approximate North Carolina shop costs.</p>
           </div>
         </div>
-        <div id="reminderList" class="reminderList"></div>
+        <div id="scheduleSummary" class="scheduleSummary"></div>
+        <section class="panel">
+          <div class="panelHeader">
+            <h3>Approaching Mileage Items</h3>
+            <span>standard schedule</span>
+          </div>
+          <div class="tableWrap">
+            <table>
+              <thead>
+                <tr><th>Due</th><th>Status</th><th>Procedure</th><th>Condition</th><th>Est. cost</th><th>Cost note</th></tr>
+              </thead>
+              <tbody id="scheduleRows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panelHeader">
+            <h3>Procedure Cost Reference</h3>
+            <span>standard and special conditions</span>
+          </div>
+          <div class="tableWrap">
+            <table>
+              <thead>
+                <tr><th>Action</th><th>Procedure</th><th>Condition</th><th>First due</th><th>Repeats</th><th>Est. cost</th><th>Cost note</th></tr>
+              </thead>
+              <tbody id="procedureCostRows"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </section>
   </main>
