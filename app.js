@@ -6,6 +6,21 @@ const CHART_METRICS = ["spend", "price", "liters", "consumption", "odometer"];
 const GALLON_TO_LITER = 3.785411784;
 const MILE_TO_KM = 1.609344;
 const CURRENCY_SYMBOL = "$";
+const VEHICLE_MODEL_YEAR = 2009;
+const VEHICLE_VALUE_REFERENCE = {
+  date: "2026-05-11",
+  odometer: 118468,
+  expectedAnnualMiles: 12000,
+  annualDepreciation: 160,
+  privateLow: 4000,
+  privateHigh: 5200,
+  tradeLow: 1700,
+  tradeHigh: 3075,
+  instantOfferLow: 1300,
+  instantOfferHigh: 3000,
+  mileageCreditCap: 900,
+  mileageCreditPerMile: 0.012,
+};
 
 const state = {
   fuel: [],
@@ -71,8 +86,18 @@ function number(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function money(value) {
   return `${CURRENCY_SYMBOL}${number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function signedMoney(value) {
+  const n = number(value);
+  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+  return `${sign}${money(Math.abs(n))}`;
 }
 
 function moneyEstimate(value) {
@@ -141,6 +166,10 @@ function daysBetween(start, end) {
   return a && b ? (b - a) / 86400000 : 0;
 }
 
+function yearsBetween(start, end) {
+  return daysBetween(start, end) / 365.25;
+}
+
 function formatMonth(value) {
   const date = safeDate(`${value}-01`);
   return date ? date.toLocaleDateString(undefined, { month: "short", year: "2-digit" }) : value;
@@ -149,6 +178,10 @@ function formatMonth(value) {
 function pricePerLiterFor(record) {
   const litersValue = litersFromGallons(record.gallons);
   return litersValue ? number(record.cost) / litersValue : 0;
+}
+
+function isCostcoFuel(record) {
+  return /costco/i.test(`${record.source || ""} ${record.tags || ""} ${record.notes || ""}`);
 }
 
 function fuelWithEconomy() {
@@ -438,6 +471,120 @@ function sourceBreakdown() {
     group.liters += litersFromGallons(record.gallons);
   }
   return [...groups.values()].sort((a, b) => b.spend - a.spend);
+}
+
+function weightedPrice(rows) {
+  const liters = rows.reduce((sum, row) => sum + litersFromGallons(row.gallons), 0);
+  const spend = rows.reduce((sum, row) => sum + number(row.cost), 0);
+  return liters ? spend / liters : 0;
+}
+
+function benchmarkPriceFor(record, competitorRows) {
+  const date = safeDate(record.date);
+  const windows = [45, 90, 180];
+  if (date) {
+    for (const days of windows) {
+      const nearby = competitorRows.filter((row) => {
+        const other = safeDate(row.date);
+        return other && Math.abs(other - date) / 86400000 <= days;
+      });
+      const price = weightedPrice(nearby);
+      if (price) return price;
+    }
+  }
+  return weightedPrice(competitorRows);
+}
+
+function costcoSavingsStats() {
+  const fuel = fuelRecords().filter((record) => pricePerLiterFor(record) > 0);
+  const costcoRows = fuel.filter(isCostcoFuel);
+  const competitorRows = fuel.filter((record) => !isCostcoFuel(record));
+  const monthly = new Map();
+  let totalSavings = 0;
+  let netSavings = 0;
+  let benchmarkSpend = 0;
+  let actualSpend = 0;
+  let savingsBenchmarkSpend = 0;
+  let savingsActualSpend = 0;
+  let savingsLiters = 0;
+  let savingsCount = 0;
+  let liters = 0;
+  for (const record of costcoRows) {
+    const actualPrice = pricePerLiterFor(record);
+    const benchmarkPrice = benchmarkPriceFor(record, competitorRows);
+    const volume = litersFromGallons(record.gallons);
+    const benchmark = benchmarkPrice * volume;
+    const actual = actualPrice * volume;
+    const savings = Math.max(0, benchmark - actual);
+    const month = dateOnly(record.date).slice(0, 7);
+    if (!monthly.has(month)) monthly.set(month, { month, savings: 0, actualSpend: 0, benchmarkSpend: 0, liters: 0, count: 0 });
+    const bucket = monthly.get(month);
+    bucket.savings += savings;
+    bucket.actualSpend += actual;
+    bucket.benchmarkSpend += benchmark;
+    bucket.liters += volume;
+    bucket.count += 1;
+    netSavings += benchmark - actual;
+    totalSavings += savings;
+    if (savings > 0) {
+      savingsBenchmarkSpend += benchmark;
+      savingsActualSpend += actual;
+      savingsLiters += volume;
+      savingsCount += 1;
+    }
+    benchmarkSpend += benchmark;
+    actualSpend += actual;
+    liters += volume;
+  }
+  return {
+    count: costcoRows.length,
+    liters,
+    actualSpend,
+    benchmarkSpend,
+    totalSavings,
+    netSavings,
+    savingsCount,
+    averageCostcoPrice: liters ? actualSpend / liters : 0,
+    averageBenchmarkPrice: liters ? benchmarkSpend / liters : 0,
+    savingsCostcoPrice: savingsLiters ? savingsActualSpend / savingsLiters : 0,
+    savingsBenchmarkPrice: savingsLiters ? savingsBenchmarkSpend / savingsLiters : 0,
+    monthly: [...monthly.values()].sort((a, b) => a.month.localeCompare(b.month)),
+  };
+}
+
+function vehicleAgeYears(dateValue = new Date().toISOString().slice(0, 10)) {
+  const date = safeDate(dateValue) || new Date();
+  return Math.max(0, (date.getFullYear() - VEHICLE_MODEL_YEAR) + date.getMonth() / 12 + date.getDate() / 365.25);
+}
+
+function vehicleValueEstimate(odometerValue = currentOdometer(), dateValue = new Date().toISOString().slice(0, 10)) {
+  const odometer = number(odometerValue) || currentOdometer() || VEHICLE_VALUE_REFERENCE.odometer;
+  const age = vehicleAgeYears(dateValue);
+  const expectedMiles = age * VEHICLE_VALUE_REFERENCE.expectedAnnualMiles;
+  const mileageDelta = expectedMiles - odometer;
+  const mileageCredit = clamp(
+    mileageDelta * VEHICLE_VALUE_REFERENCE.mileageCreditPerMile,
+    -VEHICLE_VALUE_REFERENCE.mileageCreditCap,
+    VEHICLE_VALUE_REFERENCE.mileageCreditCap,
+  );
+  const yearsFromReference = yearsBetween(VEHICLE_VALUE_REFERENCE.date, dateValue);
+  const timeAdjustment = -yearsFromReference * VEHICLE_VALUE_REFERENCE.annualDepreciation;
+  const privateLow = VEHICLE_VALUE_REFERENCE.privateLow + timeAdjustment + mileageCredit * 0.45;
+  const privateHigh = VEHICLE_VALUE_REFERENCE.privateHigh + timeAdjustment + mileageCredit * 0.9;
+  const tradeLow = VEHICLE_VALUE_REFERENCE.tradeLow + timeAdjustment * 0.5 + mileageCredit * 0.2;
+  const tradeHigh = VEHICLE_VALUE_REFERENCE.tradeHigh + timeAdjustment * 0.6 + mileageCredit * 0.35;
+  return {
+    age,
+    odometer,
+    expectedMiles,
+    mileageDelta,
+    privateLow: Math.max(1000, privateLow),
+    privateHigh: Math.max(privateLow + 500, privateHigh),
+    tradeLow: Math.max(750, tradeLow),
+    tradeHigh: Math.max(tradeLow + 500, tradeHigh),
+    instantOfferLow: VEHICLE_VALUE_REFERENCE.instantOfferLow,
+    instantOfferHigh: VEHICLE_VALUE_REFERENCE.instantOfferHigh,
+  };
 }
 
 function statsDetails() {
@@ -743,6 +890,114 @@ function drawMonthlyCostChart() {
   ctx.fillText("line: fill-ups", pad.left + 96, pad.top + 10);
 }
 
+function drawDashboardMonthlyCostChart() {
+  const chart = setupStatCanvas("dashboardMonthlyCostChart");
+  if (!chart) return;
+  const { ctx, width, height } = chart;
+  const monthly = monthlyData().slice(-12);
+  if (!monthly.length) {
+    drawEmptyChart(chart, "No monthly cost data");
+    return;
+  }
+  const savingsByMonth = new Map(costcoSavingsStats().monthly.map((row) => [row.month, row.savings]));
+  const pad = { left: 54, right: 18, top: 18, bottom: 34 };
+  const maxSpend = Math.max(...monthly.map((row) => row.spend), 1);
+  const maxSavings = Math.max(...monthly.map((row) => savingsByMonth.get(row.month) || 0), 1);
+  const scaleMax = Math.max(maxSpend, maxSavings) * 1.18;
+  drawChartGrid(ctx, width, height, pad);
+  drawAxisLabels(ctx, monthly, monthly.map((row) => row.spend), 0, scaleMax, pad, width, height, moneyEstimate, (row) => row.month.slice(2));
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const barW = Math.max(8, plotW / monthly.length - 8);
+  monthly.forEach((row, index) => {
+    const x = pad.left + (plotW * index) / monthly.length + 4;
+    const spendHeight = (row.spend / scaleMax) * plotH;
+    const spendY = pad.top + plotH - spendHeight;
+    ctx.fillStyle = "#4aa3ff";
+    ctx.fillRect(x, spendY, barW, spendHeight);
+    const savings = savingsByMonth.get(row.month) || 0;
+    if (savings) {
+      const savingsHeight = Math.max(3, (savings / scaleMax) * plotH);
+      ctx.fillStyle = "#36b37e";
+      ctx.fillRect(x, spendY - savingsHeight - 3, barW, savingsHeight);
+    }
+  });
+  ctx.fillStyle = "#cbd4df";
+  ctx.textAlign = "left";
+  ctx.fillText("blue: paid fuel cost", pad.left + 4, pad.top + 10);
+  ctx.fillStyle = "#a6f2c9";
+  ctx.fillText("green: estimated Costco savings", pad.left + 138, pad.top + 10);
+}
+
+function drawVehicleValueChart() {
+  const chart = setupStatCanvas("vehicleValueChart");
+  if (!chart) return;
+  const { ctx, width, height } = chart;
+  const data = fuelRecords()
+    .filter((row) => number(row.odometer) > 0 && safeDate(row.date))
+    .map((row) => ({ row, estimate: vehicleValueEstimate(row.odometer, row.date) }));
+  if (!data.length) {
+    drawEmptyChart(chart, "No odometer history");
+    return;
+  }
+  const pad = { left: 58, right: 18, top: 18, bottom: 34 };
+  const lows = data.map((point) => point.estimate.tradeLow);
+  const highs = data.map((point) => point.estimate.privateHigh);
+  const min = Math.max(0, Math.min(...lows) * 0.82);
+  const max = Math.max(...highs) * 1.12;
+  drawChartGrid(ctx, width, height, pad);
+  drawAxisLabels(ctx, data.map((point) => point.row), highs, min, max, pad, width, height, moneyEstimate, (row) => dateOnly(row.date).slice(2, 7));
+
+  ctx.beginPath();
+  data.forEach((point, index) => {
+    const x = chartX(index, data.length, pad, width);
+    const y = chartY(point.estimate.privateHigh, min, max, pad, height);
+    if (!index) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  [...data].reverse().forEach((point, reverseIndex) => {
+    const index = data.length - 1 - reverseIndex;
+    ctx.lineTo(chartX(index, data.length, pad, width), chartY(point.estimate.privateLow, min, max, pad, height));
+  });
+  ctx.closePath();
+  const privateFill = ctx.createLinearGradient(0, pad.top, 0, height - pad.bottom);
+  privateFill.addColorStop(0, "rgba(54, 179, 126, 0.32)");
+  privateFill.addColorStop(1, "rgba(54, 179, 126, 0.04)");
+  ctx.fillStyle = privateFill;
+  ctx.fill();
+
+  ctx.beginPath();
+  data.forEach((point, index) => {
+    const value = (point.estimate.privateLow + point.estimate.privateHigh) / 2;
+    const x = chartX(index, data.length, pad, width);
+    const y = chartY(value, min, max, pad, height);
+    if (!index) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = "#36b37e";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  data.forEach((point, index) => {
+    const value = (point.estimate.tradeLow + point.estimate.tradeHigh) / 2;
+    const x = chartX(index, data.length, pad, width);
+    const y = chartY(value, min, max, pad, height);
+    if (!index) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = "#e3a04f";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const latest = data.at(-1).estimate;
+  ctx.fillStyle = "#a6f2c9";
+  ctx.textAlign = "left";
+  ctx.fillText(`private ${moneyRange(latest.privateLow, latest.privateHigh)}`, pad.left + 4, pad.top + 10);
+  ctx.fillStyle = "#ffdf8a";
+  ctx.fillText(`trade ${moneyRange(latest.tradeLow, latest.tradeHigh)}`, pad.left + 154, pad.top + 10);
+}
+
 function drawStatsCharts() {
   drawLineAreaChart("statConsumptionChart", fuelWithEconomy(), {
     value: (row) => row.consumption,
@@ -769,6 +1024,7 @@ function drawStatsCharts() {
     fill: "rgba(143, 124, 244, 0.26)",
     leftPad: 70,
   });
+  drawVehicleValueChart();
 }
 
 function renderRecent() {
@@ -801,12 +1057,36 @@ function renderQuality() {
   ].map(([label, value, hint]) => `<div class="insightRow"><span>${label}</span><strong>${value}</strong><small>${hint}</small></div>`).join("");
 }
 
+function renderDashboardMonthlyCost() {
+  const node = el("dashboardMonthlyCost");
+  if (!node) return;
+  const monthly = monthlyData();
+  const latest = monthly.at(-1);
+  const recentSix = monthly.slice(-6);
+  const recentThree = monthly.slice(-3);
+  const sixSpend = recentSix.reduce((sum, row) => sum + row.spend, 0);
+  const threeAverage = recentThree.length ? recentThree.reduce((sum, row) => sum + row.spend, 0) / recentThree.length : 0;
+  const costco = costcoSavingsStats();
+  const latestSavings = costco.monthly.find((row) => row.month === latest?.month)?.savings || 0;
+  const defs = [
+    ["This month", latest ? money(latest.spend) : "n/a", latest ? `${latest.count} fill-ups · ${formatLiters(latest.liters)}` : "No records"],
+    ["3-month avg", threeAverage ? money(threeAverage) : "n/a", "Fuel spend per month"],
+    ["Last 6 months", recentSix.length ? money(sixSpend) : "n/a", `${recentSix.length} months in view`],
+    ["Costco saved", money(costco.totalSavings), latestSavings ? `${money(latestSavings)} this month` : `${costco.savingsCount} cheaper benchmark fills`],
+  ];
+  node.innerHTML = defs
+    .map(([label, value, hint]) => `<article class="dashboardCostItem"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>`)
+    .join("");
+}
+
 function renderStats() {
   const kpis = el("statsKpis");
   if (!kpis) return;
   const s = statsDetails();
   const monthly = monthlyData();
   const latestMonth = monthly.at(-1);
+  const costco = costcoSavingsStats();
+  const vehicle = vehicleValueEstimate();
   const defs = [
     ["Fill-ups", s.count.toLocaleString(), s.start && s.end ? `${s.start} to ${s.end}` : "No records"],
     ["Fuel spend", money(s.totalCost), `${money(s.averageFillCost)} average fill-up`],
@@ -816,9 +1096,22 @@ function renderStats() {
     ["Cost / 100 km", s.costPer100Km ? money(s.costPer100Km) : "n/a", "Fuel cost over measured intervals"],
     ["Avg price", formatPricePerLiter(s.averagePrice) || "n/a", `${formatPricePerLiter(s.minPrice) || "n/a"} to ${formatPricePerLiter(s.maxPrice) || "n/a"}`],
     ["Fill-up cadence", formatDays(s.averageCadence) || "n/a", `${money(s.dailyFuelCost)} per active day`],
+    ["Costco savings", money(costco.totalSavings), `${formatPricePerLiter(costco.savingsCostcoPrice) || "n/a"} vs ${formatPricePerLiter(costco.savingsBenchmarkPrice) || "n/a"} on cheaper comparisons`],
+    ["Vehicle value", moneyRange(vehicle.privateLow, vehicle.privateHigh), `${vehicle.age.toFixed(1)} years · ${formatOdometer(vehicle.odometer)}`],
   ];
   kpis.innerHTML = defs
     .map(([label, value, hint]) => `<article class="statKpi"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>`)
+    .join("");
+
+  const mileageDelta = Math.round(vehicle.mileageDelta);
+  const vehicleDefs = [
+    ["Private-party estimate", moneyRange(vehicle.privateLow, vehicle.privateHigh), "Mileage-adjusted KBB planning range"],
+    ["Dealer/trade estimate", moneyRange(vehicle.tradeLow, vehicle.tradeHigh), `CarMax instant-offer anchor ${moneyRange(vehicle.instantOfferLow, vehicle.instantOfferHigh)}`],
+    ["Age", `${vehicle.age.toFixed(1)} years`, `${VEHICLE_MODEL_YEAR} Toyota Matrix`],
+    ["Mileage vs age", `${Math.abs(mileageDelta).toLocaleString()} mi ${mileageDelta >= 0 ? "under" : "over"}`, `${Math.round(vehicle.expectedMiles).toLocaleString()} mi at 12k/yr baseline`],
+  ];
+  el("vehicleValueKpis").innerHTML = vehicleDefs
+    .map(([label, value, hint]) => `<article class="vehicleValueItem"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>`)
     .join("");
 
   const highlightDefs = [
@@ -827,6 +1120,7 @@ function renderStats() {
     ["Cheapest fuel", s.cheapest ? formatPricePerLiter(s.cheapest.price) : "n/a", s.cheapest ? `${dateOnly(s.cheapest.record.date)} · ${money(s.cheapest.record.cost)}` : "No priced fill-ups"],
     ["Highest fuel price", s.priciest ? formatPricePerLiter(s.priciest.price) : "n/a", s.priciest ? `${dateOnly(s.priciest.record.date)} · ${money(s.priciest.record.cost)}` : "No priced fill-ups"],
     ["Latest month", latestMonth ? money(latestMonth.spend) : "n/a", latestMonth ? `${latestMonth.count} fill-ups · ${formatLiters(latestMonth.liters)}` : "No monthly data"],
+    ["Costco net delta", signedMoney(costco.netSavings), "Against every nearby non-Costco benchmark"],
   ];
   el("statHighlights").innerHTML = highlightDefs
     .map(([label, value, hint]) => `<div class="statHighlight"><span>${label}</span><strong>${value}</strong><small>${hint}</small></div>`)
@@ -982,6 +1276,8 @@ function renderAll() {
   drawChart();
   renderRecent();
   renderQuality();
+  renderDashboardMonthlyCost();
+  drawDashboardMonthlyCostChart();
   renderStats();
   drawStatsCharts();
   renderFuelTable();
@@ -1133,6 +1429,7 @@ function bindEvents() {
       button.classList.add("active");
       el(button.dataset.view).classList.add("active");
       drawChart();
+      drawDashboardMonthlyCostChart();
       drawStatsCharts();
     });
   });
@@ -1143,6 +1440,7 @@ function bindEvents() {
       state.chartMetric = button.dataset.chart;
       saveSettings();
       drawChart();
+      drawDashboardMonthlyCostChart();
       drawStatsCharts();
     });
   });
@@ -1169,6 +1467,7 @@ function bindEvents() {
   bindEntryForms();
   window.addEventListener("resize", () => {
     drawChart();
+    drawDashboardMonthlyCostChart();
     drawStatsCharts();
   });
 }

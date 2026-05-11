@@ -71,6 +71,17 @@
           </section>
         </div>
 
+        <section class="panel dashboardMonthlyPanel">
+          <div class="panelHeader">
+            <h3>Monthly Cost</h3>
+            <span>latest fuel spend and Costco savings</span>
+          </div>
+          <div class="dashboardCostGrid" id="dashboardMonthlyCost"></div>
+          <div class="miniChartWrap">
+            <canvas id="dashboardMonthlyCostChart" width="980" height="220" aria-label="Dashboard monthly fuel cost chart"></canvas>
+          </div>
+        </section>
+
         <section class="panel">
           <div class="panelHeader">
             <h3>Recent Fill-ups</h3>
@@ -98,6 +109,17 @@
         <div id="statsKpis" class="statsKpis"></div>
 
         <div class="statsChartGrid">
+          <section class="panel statChartPanel wide">
+            <div class="panelHeader">
+              <h3>Vehicle Value Tracker</h3>
+              <span>age and mileage estimate</span>
+            </div>
+            <div id="vehicleValueKpis" class="vehicleValueKpis"></div>
+            <div class="statChartWrap">
+              <canvas id="vehicleValueChart" width="900" height="340" aria-label="Estimated vehicle value trend chart"></canvas>
+            </div>
+          </section>
+
           <section class="panel statChartPanel wide">
             <div class="panelHeader">
               <h3>Consumption Trend</h3>

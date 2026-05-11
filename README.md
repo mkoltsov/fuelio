@@ -24,7 +24,7 @@ Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger and Fueli
 
 Publish this folder from a public repository or a GitHub Pages-enabled private repository. The app has no server component. New fill-ups and maintenance costs are drafted in browser localStorage, then submitted through a prefilled GitHub issue that an owner-only workflow commits to CSV.
 
-The `Statistics` view shows Fuelio-style fill-up totals, fuel costs, consumption, price, odometer trends, source mix, and a monthly scoreboard from the sanitized public CSV.
+The `Statistics` view shows Fuelio-style fill-up totals, fuel costs, consumption, price, odometer trends, Costco savings estimates, a mileage-adjusted vehicle value tracker, source mix, and a monthly scoreboard from the sanitized public CSV. The dashboard also includes a monthly fuel-cost strip for the latest spend trend.
 
 For privacy, the committed `data/fuel.csv` omits raw Fuelio IDs, exact Fuelio location fields, Costco receipt numbers, Costco station/city notes, email addresses, account identifiers, and membership identifiers. The raw imported files stay ignored by git.
 
