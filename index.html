@@ -104,6 +104,19 @@
             <h2 id="statisticsTitle">Statistics</h2>
             <p>Fill-ups, costs, consumption, and mileage trends from the public ledger.</p>
           </div>
+          <div class="timePicker" aria-label="Statistics time range">
+            <label>Range
+              <select id="statsRangePreset">
+                <option value="all">All time</option>
+                <option value="12">Last 12 months</option>
+                <option value="6">Last 6 months</option>
+                <option value="3">Last 3 months</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>From <input id="statsStartMonth" type="month"></label>
+            <label>To <input id="statsEndMonth" type="month"></label>
+          </div>
         </div>
 
         <div id="statsKpis" class="statsKpis"></div>
@@ -295,7 +308,7 @@
         <div class="sectionHeader">
           <div>
             <h2 id="remindersTitle">Maintenance Schedule</h2>
-            <p>2009 Toyota Matrix mileage schedule with approximate North Carolina shop costs.</p>
+            <p>Second-generation 2011 Toyota Matrix mileage schedule with approximate North Carolina shop costs.</p>
           </div>
         </div>
         <div id="scheduleSummary" class="scheduleSummary"></div>

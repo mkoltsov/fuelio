@@ -336,6 +336,32 @@ select:focus-visible,
   width: 100%;
 }
 
+.timePicker {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.timePicker label {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 5px;
+}
+
+.timePicker input,
+.timePicker select {
+  background: #171d23;
+  border: 1px solid #46535f;
+  border-radius: 7px;
+  color: var(--ink);
+  min-height: 36px;
+  min-width: 128px;
+  padding: 6px 9px;
+}
+
 .chartTooltip {
   background: rgba(15, 19, 23, 0.96);
   border: 1px solid #46535f;
@@ -779,7 +805,8 @@ th.numeric {
 @media (max-width: 900px) {
   .topbar,
   .sectionHeader,
-  .filters {
+  .filters,
+  .timePicker {
     align-items: stretch;
     flex-direction: column;
   }
@@ -806,6 +833,12 @@ th.numeric {
   }
 
   .filters input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .timePicker input,
+  .timePicker select {
     min-width: 0;
     width: 100%;
   }

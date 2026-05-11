@@ -6,18 +6,18 @@ const CHART_METRICS = ["spend", "price", "liters", "consumption", "odometer"];
 const GALLON_TO_LITER = 3.785411784;
 const MILE_TO_KM = 1.609344;
 const CURRENCY_SYMBOL = "$";
-const VEHICLE_MODEL_YEAR = 2009;
+const VEHICLE_MODEL_YEAR = 2011;
 const VEHICLE_VALUE_REFERENCE = {
   date: "2026-05-11",
   odometer: 118468,
   expectedAnnualMiles: 12000,
-  annualDepreciation: 160,
-  privateLow: 4000,
-  privateHigh: 5200,
-  tradeLow: 1700,
-  tradeHigh: 3075,
-  instantOfferLow: 1300,
-  instantOfferHigh: 3000,
+  annualDepreciation: 560,
+  privateLow: 4800,
+  privateHigh: 5900,
+  tradeLow: 3600,
+  tradeHigh: 4300,
+  instantOfferLow: 3600,
+  instantOfferHigh: 4300,
   mileageCreditCap: 900,
   mileageCreditPerMile: 0.012,
 };
@@ -28,6 +28,9 @@ const state = {
   reminders: [],
   schedule: [],
   chartMetric: "consumption",
+  statsRangePreset: "all",
+  statsStartMonth: "",
+  statsEndMonth: "",
 };
 
 const el = (id) => document.getElementById(id);
@@ -175,6 +178,17 @@ function formatMonth(value) {
   return date ? date.toLocaleDateString(undefined, { month: "short", year: "2-digit" }) : value;
 }
 
+function addMonths(month, delta) {
+  const [year, monthIndex] = String(month).split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !monthIndex) return "";
+  const date = new Date(year, monthIndex - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function recordMonth(record) {
+  return dateOnly(record.date).slice(0, 7);
+}
+
 function chartTooltip() {
   let tooltip = el("chartTooltip");
   if (!tooltip) {
@@ -274,8 +288,8 @@ function isCostcoFuel(record) {
   return /costco/i.test(`${record.source || ""} ${record.tags || ""} ${record.notes || ""}`);
 }
 
-function fuelWithEconomy() {
-  const rows = state.fuel
+function fuelWithEconomy(records = state.fuel) {
+  const rows = records
     .slice()
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
     .map((record) => ({ record, odometer: number(record.odometer), gallons: number(record.gallons), liters: litersFromGallons(record.gallons), consumption: 0, km: 0 }));
@@ -351,10 +365,18 @@ function readJSONStorage(key) {
 function applySettings(data) {
   if (!data || typeof data !== "object") return;
   if (CHART_METRICS.includes(data.chartMetric)) state.chartMetric = data.chartMetric;
+  if (["all", "12", "6", "3", "custom"].includes(data.statsRangePreset)) state.statsRangePreset = data.statsRangePreset;
+  if (/^\d{4}-\d{2}$/.test(data.statsStartMonth || "")) state.statsStartMonth = data.statsStartMonth;
+  if (/^\d{4}-\d{2}$/.test(data.statsEndMonth || "")) state.statsEndMonth = data.statsEndMonth;
 }
 
 function saveSettings() {
-  const saved = writeLocalStorage(SETTINGS_KEY, JSON.stringify({ chartMetric: state.chartMetric }));
+  const saved = writeLocalStorage(SETTINGS_KEY, JSON.stringify({
+    chartMetric: state.chartMetric,
+    statsRangePreset: state.statsRangePreset,
+    statsStartMonth: state.statsStartMonth,
+    statsEndMonth: state.statsEndMonth,
+  }));
   return saved;
 }
 
@@ -516,10 +538,10 @@ function scheduleCostLabel(row) {
   return number(row.cost_high) ? `${range} if separate` : "Usually bundled";
 }
 
-function monthlyData() {
+function monthlyData(records = state.fuel) {
   const buckets = new Map();
-  const economyByRecord = new Map(fuelWithEconomy().map((row) => [row.record, row]));
-  for (const record of state.fuel) {
+  const economyByRecord = new Map(fuelWithEconomy(records).map((row) => [row.record, row]));
+  for (const record of records) {
     const month = dateOnly(record.date).slice(0, 7);
     if (!month) continue;
     if (!buckets.has(month)) buckets.set(month, { month, spend: 0, liters: 0, count: 0, economyKm: 0, economyLiters: 0, odometer: 0 });
@@ -543,16 +565,43 @@ function monthlyData() {
     }));
 }
 
-function fuelRecords() {
-  return state.fuel
+function fuelRecords(records = state.fuel) {
+  return records
     .filter((r) => number(r.gallons) || number(r.cost))
     .slice()
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
-function sourceBreakdown() {
+function statsRange() {
+  const months = monthlyData().map((row) => row.month);
+  const latest = months.at(-1) || "";
+  if (!latest || state.statsRangePreset === "all") return { start: "", end: "", label: "All time" };
+  if (state.statsRangePreset === "custom") {
+    const start = state.statsStartMonth || months[0] || "";
+    const end = state.statsEndMonth || latest;
+    return start && end && start > end
+      ? { start: end, end: start, label: `${formatMonth(end)} to ${formatMonth(start)}` }
+      : { start, end, label: `${formatMonth(start)} to ${formatMonth(end)}` };
+  }
+  const count = Number.parseInt(state.statsRangePreset, 10);
+  const start = addMonths(latest, -(count - 1));
+  return { start, end: latest, label: `Last ${count} months` };
+}
+
+function statsFuelRecords() {
+  const range = statsRange();
+  return fuelRecords().filter((record) => {
+    const month = recordMonth(record);
+    if (!month) return false;
+    if (range.start && month < range.start) return false;
+    if (range.end && month > range.end) return false;
+    return true;
+  });
+}
+
+function sourceBreakdown(records = fuelRecords()) {
   const groups = new Map();
-  for (const record of fuelRecords()) {
+  for (const record of records) {
     const name = record.source || "Unknown";
     if (!groups.has(name)) groups.set(name, { name, count: 0, spend: 0, liters: 0 });
     const group = groups.get(name);
@@ -585,10 +634,10 @@ function benchmarkPriceFor(record, competitorRows) {
   return weightedPrice(competitorRows);
 }
 
-function costcoSavingsStats() {
-  const fuel = fuelRecords().filter((record) => pricePerLiterFor(record) > 0);
+function costcoSavingsStats(records = fuelRecords(), benchmarkRecords = fuelRecords()) {
+  const fuel = records.filter((record) => pricePerLiterFor(record) > 0);
   const costcoRows = fuel.filter(isCostcoFuel);
-  const competitorRows = fuel.filter((record) => !isCostcoFuel(record));
+  const competitorRows = benchmarkRecords.filter((record) => pricePerLiterFor(record) > 0 && !isCostcoFuel(record));
   const monthly = new Map();
   let totalSavings = 0;
   let netSavings = 0;
@@ -677,10 +726,17 @@ function vehicleValueEstimate(odometerValue = currentOdometer(), dateValue = new
   };
 }
 
-function statsDetails() {
+function statsDetails(records = fuelRecords()) {
   const m = metrics();
-  const fuel = fuelRecords();
-  const economyRows = fuelWithEconomy().filter((r) => r.consumption > 0);
+  const fuel = fuelRecords(records);
+  const missingOdometer = fuel.filter((r) => !number(r.odometer)).length;
+  const totalCost = fuel.reduce((sum, r) => sum + number(r.cost), 0);
+  const totalGallons = fuel.reduce((sum, r) => sum + number(r.gallons), 0);
+  const totalLiters = litersFromGallons(totalGallons);
+  const prices = fuel.map(pricePerLiterFor).filter(Boolean);
+  const economyRows = fuelWithEconomy(fuel).filter((r) => r.consumption > 0);
+  const economyKm = economyRows.reduce((sum, row) => sum + row.km, 0);
+  const economyLiters = economyRows.reduce((sum, row) => sum + row.liters, 0);
   const economyCost = economyRows.reduce((sum, row) => sum + number(row.record.cost), 0);
   const dated = fuel.filter((r) => safeDate(r.date));
   const cadences = [];
@@ -701,12 +757,27 @@ function statsDetails() {
   const activeDays = Math.max(1, daysBetween(firstDate, lastDate));
   return {
     ...m,
-    averageFillLiters: m.count ? m.totalLiters / m.count : 0,
-    averageFillCost: m.count ? m.totalCost / m.count : 0,
+    count: fuel.length,
+    totalCost,
+    totalGallons,
+    totalLiters,
+    averagePrice: totalLiters ? totalCost / totalLiters : 0,
+    minPrice: prices.length ? Math.min(...prices) : 0,
+    maxPrice: prices.length ? Math.max(...prices) : 0,
+    avgConsumption: economyKm ? (economyLiters / economyKm) * 100 : 0,
+    economyCount: economyRows.length,
+    economyKm,
+    start: firstDate,
+    end: lastDate,
+    latest: fuel.at(-1),
+    latestOdometer: fuel.filter((r) => number(r.odometer) > 0).at(-1),
+    missingOdometer,
+    averageFillLiters: fuel.length ? totalLiters / fuel.length : 0,
+    averageFillCost: fuel.length ? totalCost / fuel.length : 0,
     averageCadence,
     activeDays,
-    dailyFuelCost: m.totalCost / activeDays,
-    costPer100Km: m.economyKm ? (economyCost / m.economyKm) * 100 : 0,
+    dailyFuelCost: totalCost / activeDays,
+    costPer100Km: economyKm ? (economyCost / economyKm) * 100 : 0,
     bestEconomy,
     worstEconomy,
     cheapest,
@@ -956,11 +1027,11 @@ function drawLineAreaChart(id, rows, options) {
   })));
 }
 
-function drawMonthlyCostChart() {
+function drawMonthlyCostChart(records = state.fuel) {
   const chart = setupStatCanvas("statCostChart");
   if (!chart) return;
   const { ctx, width, height } = chart;
-  const data = monthlyData().slice(-18);
+  const data = monthlyData(records).slice(-18);
   if (!data.length) {
     drawEmptyChart(chart, "No monthly data");
     registerChartPoints(chart.canvas, []);
@@ -1087,11 +1158,11 @@ function drawDashboardMonthlyCostChart() {
   registerChartPoints(chart.canvas, points);
 }
 
-function drawVehicleValueChart() {
+function drawVehicleValueChart(records = fuelRecords()) {
   const chart = setupStatCanvas("vehicleValueChart");
   if (!chart) return;
   const { ctx, width, height } = chart;
-  const data = fuelRecords()
+  const data = fuelRecords(records)
     .filter((row) => number(row.odometer) > 0 && safeDate(row.date))
     .map((row) => ({ row, estimate: vehicleValueEstimate(row.odometer, row.date) }));
   if (!data.length) {
@@ -1186,7 +1257,8 @@ function drawVehicleValueChart() {
 }
 
 function drawStatsCharts() {
-  drawLineAreaChart("statConsumptionChart", fuelWithEconomy(), {
+  const records = statsFuelRecords();
+  drawLineAreaChart("statConsumptionChart", fuelWithEconomy(records), {
     value: (row) => row.consumption,
     label: (row) => dateOnly(row.record.date).slice(2, 7),
     formatY: (value) => value.toFixed(1),
@@ -1200,8 +1272,8 @@ function drawStatsCharts() {
       `Fuel: ${formatLiters(row.liters)}`,
     ],
   });
-  drawMonthlyCostChart();
-  drawLineAreaChart("statPriceChart", monthlyData(), {
+  drawMonthlyCostChart(records);
+  drawLineAreaChart("statPriceChart", monthlyData(records), {
     value: (row) => row.price,
     label: (row) => row.month.slice(2),
     formatY: (value) => `$${value.toFixed(2)}`,
@@ -1215,7 +1287,7 @@ function drawStatsCharts() {
       `Liters: ${formatLiters(row.liters)}`,
     ],
   });
-  drawLineAreaChart("statOdometerChart", fuelRecords().filter((row) => number(row.odometer) > 0), {
+  drawLineAreaChart("statOdometerChart", fuelRecords(records).filter((row) => number(row.odometer) > 0), {
     value: (row) => row.odometer,
     label: (row) => dateOnly(row.date).slice(2, 7),
     formatY: (value) => Math.round(value).toLocaleString(),
@@ -1228,7 +1300,7 @@ function drawStatsCharts() {
       `Fuel cost: ${money(row.cost)}`,
     ],
   });
-  drawVehicleValueChart();
+  drawVehicleValueChart(records);
 }
 
 function renderRecent() {
@@ -1286,13 +1358,18 @@ function renderDashboardMonthlyCost() {
 function renderStats() {
   const kpis = el("statsKpis");
   if (!kpis) return;
-  const s = statsDetails();
-  const monthly = monthlyData();
+  const records = statsFuelRecords();
+  const range = statsRange();
+  const s = statsDetails(records);
+  const monthly = monthlyData(records);
   const latestMonth = monthly.at(-1);
-  const costco = costcoSavingsStats();
-  const vehicle = vehicleValueEstimate();
+  const costco = costcoSavingsStats(records, fuelRecords());
+  const latestWithOdometer = fuelRecords(records).filter((row) => number(row.odometer) > 0).at(-1);
+  const vehicle = latestWithOdometer
+    ? vehicleValueEstimate(latestWithOdometer.odometer, latestWithOdometer.date)
+    : vehicleValueEstimate();
   const defs = [
-    ["Fill-ups", s.count.toLocaleString(), s.start && s.end ? `${s.start} to ${s.end}` : "No records"],
+    ["Fill-ups", s.count.toLocaleString(), range.label],
     ["Fuel spend", money(s.totalCost), `${money(s.averageFillCost)} average fill-up`],
     ["Fuel bought", formatLiters(s.totalLiters), `${formatLiters(s.averageFillLiters)} average fill`],
     ["Distance tracked", formatKm(s.economyKm), `${s.economyCount} economy intervals`],
@@ -1330,7 +1407,7 @@ function renderStats() {
     .map(([label, value, hint]) => `<div class="statHighlight"><span>${label}</span><strong>${value}</strong><small>${hint}</small></div>`)
     .join("");
 
-  const sources = sourceBreakdown();
+  const sources = sourceBreakdown(records);
   const totalSpend = sources.reduce((sum, source) => sum + source.spend, 0);
   el("sourceMix").innerHTML = sources.length ? sources.map((source) => {
     const pct = totalSpend ? (source.spend / totalSpend) * 100 : 0;
@@ -1344,7 +1421,7 @@ function renderStats() {
   }).join("") : `<div class="empty">No source data</div>`;
 
   const recentMonths = monthly.slice(-12).reverse();
-  el("monthlyScoreboardHint").textContent = `${recentMonths.length} latest months`;
+  el("monthlyScoreboardHint").textContent = `${recentMonths.length} months · ${range.label}`;
   el("monthlyStatsRows").innerHTML = recentMonths.length ? recentMonths.map((row) => `
     <tr>
       <td>${formatMonth(row.month)}</td>
@@ -1474,8 +1551,29 @@ function syncChartControls() {
   });
 }
 
+function syncStatsRangeControls() {
+  const preset = el("statsRangePreset");
+  const start = el("statsStartMonth");
+  const end = el("statsEndMonth");
+  if (!preset || !start || !end) return;
+  const months = monthlyData().map((row) => row.month);
+  const first = months[0] || "";
+  const latest = months.at(-1) || "";
+  preset.value = state.statsRangePreset;
+  start.value = state.statsStartMonth || first;
+  end.value = state.statsEndMonth || latest;
+  start.min = first;
+  start.max = latest;
+  end.min = first;
+  end.max = latest;
+  const custom = state.statsRangePreset === "custom";
+  start.disabled = !custom;
+  end.disabled = !custom;
+}
+
 function renderAll() {
   syncChartControls();
+  syncStatsRangeControls();
   renderMetrics();
   drawChart();
   renderRecent();
@@ -1645,6 +1743,28 @@ function bindEvents() {
       saveSettings();
       drawChart();
       drawDashboardMonthlyCostChart();
+      drawStatsCharts();
+    });
+  });
+  el("statsRangePreset").addEventListener("change", () => {
+    state.statsRangePreset = el("statsRangePreset").value;
+    if (state.statsRangePreset === "custom") {
+      state.statsStartMonth = el("statsStartMonth").value;
+      state.statsEndMonth = el("statsEndMonth").value;
+    }
+    saveSettings();
+    renderStats();
+    syncStatsRangeControls();
+    drawStatsCharts();
+  });
+  ["statsStartMonth", "statsEndMonth"].forEach((id) => {
+    el(id).addEventListener("change", () => {
+      state.statsRangePreset = "custom";
+      state.statsStartMonth = el("statsStartMonth").value;
+      state.statsEndMonth = el("statsEndMonth").value;
+      saveSettings();
+      renderStats();
+      syncStatsRangeControls();
       drawStatsCharts();
     });
   });

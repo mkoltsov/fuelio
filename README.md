@@ -14,7 +14,7 @@ Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger and Fueli
 - `data/Fuelio_latest.csv` - local newest Fuelio backup pulled from Gmail, ignored by git
 - `data/maintenance.csv` - maintenance records
 - `data/reminders.csv` - reminder records
-- `data/maintenance_schedule.csv` - 2009 Toyota Matrix mileage schedule and approximate North Carolina procedure costs
+- `data/maintenance_schedule.csv` - second-generation 2011 Toyota Matrix mileage schedule and approximate North Carolina procedure costs
 - `.github/workflows/update-ledger-entry.yml` - owner-only issue workflow that commits manual fill-ups and maintenance costs
 - `scripts/merge_fuelio_costco.py` - rebuilds private and public fuel ledgers
 - `scripts/update_costco_fillups.py` - fetches new Costco gas receipts through the local managed Brave session
@@ -24,7 +24,7 @@ Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger and Fueli
 
 Publish this folder from a public repository or a GitHub Pages-enabled private repository. The app has no server component. New fill-ups and maintenance costs are drafted in browser localStorage, then submitted through a prefilled GitHub issue that an owner-only workflow commits to CSV.
 
-The `Statistics` view shows Fuelio-style fill-up totals, fuel costs, consumption, price, odometer trends, Costco savings estimates, a mileage-adjusted vehicle value tracker, source mix, and a monthly scoreboard from the sanitized public CSV. The dashboard also includes a monthly fuel-cost strip for the latest spend trend.
+The `Statistics` view has all-time, recent-month, and custom month filters for Fuelio-style fill-up totals, fuel costs, consumption, price, odometer trends, Costco savings estimates, a mileage-adjusted 2011 Matrix value tracker, source mix, and a monthly scoreboard from the sanitized public CSV. The dashboard also includes a monthly fuel-cost strip for the latest spend trend.
 
 For privacy, the committed `data/fuel.csv` omits raw Fuelio IDs, exact Fuelio location fields, Costco receipt numbers, Costco station/city notes, email addresses, account identifiers, and membership identifiers. The raw imported files stay ignored by git.
 
@@ -40,7 +40,7 @@ The merge writes `data/fuel.private.csv` for local use and `data/fuel.csv` for p
 
 Manual public fill-ups submitted from the page use gallons and odometer miles. They are stored in `data/manual_fuel.csv`; the merge includes them so scheduled Costco/Fuelio rebuilds do not discard them. Fuelio maintenance-cost rows are imported from the backup when the `## Costs` section contains records.
 
-The Schedule view uses the local 2009 Toyota Matrix scheduled-maintenance guide and the latest public odometer to show upcoming 5,000-mile service items. Cost ranges are approximate North Carolina independent-shop estimates and are intended for planning, not as quotes.
+The Schedule view uses the local second-generation Toyota Matrix scheduled-maintenance guide and the latest public odometer to show upcoming 5,000-mile service items. Cost ranges are approximate North Carolina independent-shop estimates and are intended for planning, not as quotes.
 
 ## Scheduled Costco Updates
 
