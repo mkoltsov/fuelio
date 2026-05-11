@@ -44,6 +44,7 @@
             <button class="segment" data-chart="price" type="button">Price</button>
             <button class="segment" data-chart="gallons" type="button">Gallons</button>
             <button class="segment" data-chart="mpg" type="button">MPG</button>
+            <button class="segment" data-chart="odometer" type="button">Odometer</button>
           </div>
         </div>
 
@@ -59,29 +60,20 @@
           </div>
         </section>
 
-        <div class="split">
-          <section class="panel">
-            <div class="panelHeader">
-              <h3>Recent Fill-ups</h3>
-              <span id="recentCount"></span>
-            </div>
-            <div class="tableWrap compact">
-              <table>
-                <thead>
-                  <tr><th>Date</th><th>Station</th><th>Gallons</th><th>Price</th><th>Total</th></tr>
-                </thead>
-                <tbody id="recentFuelRows"></tbody>
-              </table>
-            </div>
-          </section>
-          <section class="panel">
-            <div class="panelHeader">
-              <h3>Station Mix</h3>
-              <span id="stationCount"></span>
-            </div>
-            <div id="stationBars" class="barList"></div>
-          </section>
-        </div>
+        <section class="panel">
+          <div class="panelHeader">
+            <h3>Recent Fill-ups</h3>
+            <span id="recentCount"></span>
+          </div>
+          <div class="tableWrap compact">
+            <table>
+              <thead>
+                <tr><th>Date</th><th>Odometer</th><th>Gallons</th><th>Price</th><th>Total</th></tr>
+              </thead>
+              <tbody id="recentFuelRows"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section id="fuel" class="view" aria-labelledby="fuelTitle">
@@ -93,8 +85,7 @@
           <button id="addFuelRow" type="button">Add Fuel</button>
         </div>
         <div class="filters">
-          <input id="fuelSearch" type="search" placeholder="Search station, note, tag">
-          <select id="stationFilter" aria-label="Station filter"></select>
+          <input id="fuelSearch" type="search" placeholder="Search date, note, tag, source">
         </div>
         <div class="tableWrap">
           <table>
@@ -141,7 +132,7 @@
         <div class="sectionHeader">
           <div>
             <h2 id="settingsTitle">Settings</h2>
-            <p>Vehicle metadata and privacy defaults.</p>
+            <p id="settingsStatus">Saved in this browser</p>
           </div>
         </div>
         <div class="settingsGrid">

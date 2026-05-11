@@ -76,8 +76,7 @@ h3 {
 
 p,
 .panelHeader span,
-.metricLabel,
-.barMeta {
+.metricLabel {
   color: var(--muted);
   font-size: 13px;
 }
@@ -251,12 +250,6 @@ select:focus-visible,
   width: 100%;
 }
 
-.split {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-}
-
 .tableWrap {
   overflow: auto;
   width: 100%;
@@ -332,29 +325,6 @@ th.numeric {
   min-width: 280px;
 }
 
-.barList {
-  padding: 12px 13px 14px;
-}
-
-.barRow {
-  display: grid;
-  gap: 5px;
-  grid-template-columns: 90px minmax(0, 1fr) 72px;
-  margin-bottom: 12px;
-}
-
-.barTrack {
-  background: #edf2f3;
-  border-radius: 999px;
-  height: 12px;
-  overflow: hidden;
-}
-
-.barFill {
-  background: linear-gradient(90deg, var(--blue), var(--green));
-  height: 100%;
-}
-
 .reminderList {
   display: grid;
   gap: 10px;
@@ -424,7 +394,6 @@ th.numeric {
   }
 
   .metricsGrid,
-  .split,
   .settingsGrid {
     grid-template-columns: 1fr;
   }

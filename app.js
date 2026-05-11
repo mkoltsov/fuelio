@@ -1,4 +1,6 @@
 const STORAGE_KEY = "fuel-ledger-pages-v2";
+const SETTINGS_KEY = "fuel-ledger-settings-v1";
+const CHART_METRICS = ["spend", "price", "gallons", "mpg", "odometer"];
 
 const state = {
   fuel: [],
@@ -74,8 +76,13 @@ function money(value) {
   return `${state.settings.currencySymbol}${number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function gallons(value) {
-  return `${number(value).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
+function formatFuelVolume(value) {
+  return `${number(value).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })} ${state.settings.fuelUnit}`;
+}
+
+function formatOdometer(value) {
+  const n = number(value);
+  return n ? `${Math.round(n).toLocaleString()} ${state.settings.distanceUnit}` : "";
 }
 
 function dateOnly(value) {
@@ -110,11 +117,6 @@ function mpgForRecord(record, economyRows = fuelWithEconomy()) {
   return row && row.mpg ? row.mpg : 0;
 }
 
-function noteStation(record) {
-  const match = String(record.notes || "").match(/^(.*?);/);
-  return match ? match[1] : "Unknown";
-}
-
 function normalizeFuel(record) {
   return {
     date: record.date || record.fuelup_date || "",
@@ -130,24 +132,65 @@ function normalizeFuel(record) {
   };
 }
 
+function updateSettingsStatus(message) {
+  const node = el("settingsStatus");
+  if (node) node.textContent = message;
+}
+
+function writeLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    updateSettingsStatus("Browser storage is blocked");
+    return false;
+  }
+}
+
+function readJSONStorage(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function applySettings(data) {
+  if (!data || typeof data !== "object") return;
+  state.settings = { ...state.settings, ...(data.settings || {}) };
+  if (CHART_METRICS.includes(data.chartMetric)) state.chartMetric = data.chartMetric;
+}
+
+function saveSettings() {
+  const saved = writeLocalStorage(SETTINGS_KEY, JSON.stringify({
+    settings: state.settings,
+    chartMetric: state.chartMetric,
+  }));
+  updateSettingsStatus(saved ? "Saved in this browser" : "Browser storage is blocked");
+  return saved;
+}
+
+function loadSavedSettings() {
+  const data = readJSONStorage(SETTINGS_KEY);
+  applySettings(data);
+  return Boolean(data);
+}
+
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const saved = writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+  const settingsSaved = saveSettings();
+  return saved && settingsSaved;
 }
 
 function loadSaved() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return false;
-  try {
-    const data = JSON.parse(raw);
-    state.fuel = Array.isArray(data.fuel) ? data.fuel : [];
-    state.maintenance = Array.isArray(data.maintenance) ? data.maintenance : [];
-    state.reminders = Array.isArray(data.reminders) ? data.reminders : [];
-    state.settings = { ...state.settings, ...(data.settings || {}) };
-    state.chartMetric = ["spend", "price", "gallons", "mpg"].includes(data.chartMetric) ? data.chartMetric : state.chartMetric;
-    return true;
-  } catch {
-    return false;
-  }
+  const data = readJSONStorage(STORAGE_KEY);
+  if (!data) return false;
+  state.fuel = Array.isArray(data.fuel) ? data.fuel : [];
+  state.maintenance = Array.isArray(data.maintenance) ? data.maintenance : [];
+  state.reminders = Array.isArray(data.reminders) ? data.reminders : [];
+  applySettings(data);
+  return true;
 }
 
 async function loadSeedData() {
@@ -179,6 +222,9 @@ function metrics() {
   const economyGallons = economy.reduce((sum, r) => sum + r.gallons, 0);
   const sortedDates = fuel.map((r) => dateOnly(r.date)).filter(Boolean).sort();
   const latest = fuel.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  const latestOdometer = fuel
+    .filter((r) => number(r.odometer) > 0)
+    .sort((a, b) => number(b.odometer) - number(a.odometer))[0];
   return {
     count: fuel.length,
     totalCost,
@@ -191,6 +237,7 @@ function metrics() {
     start: sortedDates[0] || "",
     end: sortedDates.at(-1) || "",
     latest,
+    latestOdometer,
   };
 }
 
@@ -200,11 +247,12 @@ function monthlyData() {
   for (const record of state.fuel) {
     const month = dateOnly(record.date).slice(0, 7);
     if (!month) continue;
-    if (!buckets.has(month)) buckets.set(month, { month, spend: 0, gallons: 0, count: 0, economyMiles: 0, economyGallons: 0 });
+    if (!buckets.has(month)) buckets.set(month, { month, spend: 0, gallons: 0, count: 0, economyMiles: 0, economyGallons: 0, odometer: 0 });
     const bucket = buckets.get(month);
     bucket.spend += number(record.cost);
     bucket.gallons += number(record.gallons);
     bucket.count += 1;
+    bucket.odometer = Math.max(bucket.odometer, number(record.odometer));
     const economy = economyByRecord.get(record);
     if (economy && economy.mpg) {
       bucket.economyMiles += economy.miles;
@@ -226,9 +274,10 @@ function renderMetrics() {
   el("dateRange").textContent = m.start && m.end ? `${m.start} to ${m.end}` : "No records loaded";
   const defs = [
     ["Fill-ups", m.count, "Fuelio plus Costco"],
+    ["Latest odometer", formatOdometer(m.latestOdometer?.odometer) || "n/a", dateOnly(m.latestOdometer?.date) || "No reading"],
     ["Fuel spend", money(m.totalCost), "Receipt totals"],
-    ["Fuel bought", `${m.totalGallons.toFixed(1)} gal`, "Total volume"],
-    ["Avg price", `${money(m.averagePrice)}/gal`, `Range ${money(m.minPrice)} to ${money(m.maxPrice)}`],
+    ["Fuel bought", `${m.totalGallons.toFixed(1)} ${state.settings.fuelUnit}`, "Total volume"],
+    ["Avg price", `${money(m.averagePrice)}/${state.settings.fuelUnit}`, `Range ${money(m.minPrice)} to ${money(m.maxPrice)}`],
     ["Avg MPG", m.avgMpg ? m.avgMpg.toFixed(1) : "n/a", `${m.economyCount} odometer intervals`],
   ];
   el("metricsGrid").innerHTML = defs
@@ -249,13 +298,16 @@ function drawChart() {
   const data = monthlyData();
   ctx.clearRect(0, 0, width, height);
   const metric = state.chartMetric;
-  const titleMap = { spend: "Monthly Fuel Spend", price: "Monthly Fuel Price", gallons: "Monthly Gallons", mpg: "Monthly MPG" };
-  const subtitleMap = { spend: "receipt totals", price: "weighted average per gallon", gallons: "volume purchased", mpg: "odometer-derived economy" };
+  const titleMap = { spend: "Monthly Fuel Spend", price: "Monthly Fuel Price", gallons: "Monthly Fuel Volume", mpg: "Monthly MPG", odometer: "Monthly Odometer" };
+  const subtitleMap = { spend: "receipt totals", price: `weighted average per ${state.settings.fuelUnit}`, gallons: "volume purchased", mpg: "odometer-derived economy", odometer: "latest reading each month" };
   el("chartTitle").textContent = titleMap[metric];
   el("chartSubtitle").textContent = subtitleMap[metric];
   if (!data.length) return;
   const values = data.map((d) => d[metric]);
-  const max = Math.max(...values, 1);
+  const plottedValues = metric === "odometer" ? values.filter(Boolean) : values;
+  const max = Math.max(...plottedValues, 1);
+  const min = metric === "odometer" && plottedValues.length ? Math.min(...plottedValues) : 0;
+  const span = Math.max(max - min, 1);
   const pad = { left: 46, right: 12, top: 18, bottom: 36 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
@@ -272,10 +324,11 @@ function drawChart() {
   const barW = Math.max(8, plotW / data.length - barGap);
   data.forEach((d, index) => {
     const value = d[metric];
+    if (metric === "odometer" && !value) return;
     const x = pad.left + (plotW * index) / data.length + barGap / 2;
-    const h = (value / max) * plotH;
+    const h = ((value - min) / span) * plotH;
     const y = pad.top + plotH - h;
-    ctx.fillStyle = metric === "price" ? "#a46424" : metric === "gallons" || metric === "mpg" ? "#2f7d62" : "#1f6f9f";
+    ctx.fillStyle = metric === "price" ? "#a46424" : metric === "gallons" || metric === "mpg" ? "#2f7d62" : metric === "odometer" ? "#6d5f98" : "#1f6f9f";
     ctx.fillRect(x, y, barW, h);
     if (index % Math.ceil(data.length / 8) === 0) {
       ctx.fillStyle = "#5d6877";
@@ -288,8 +341,8 @@ function drawChart() {
   ctx.font = "12px sans-serif";
   ctx.textAlign = "right";
   for (let i = 0; i <= 4; i += 1) {
-    const value = max - (max * i) / 4;
-    const label = metric === "spend" || metric === "price" ? money(value) : value.toFixed(0);
+    const value = max - (span * i) / 4;
+    const label = metric === "spend" || metric === "price" ? money(value) : Math.round(value).toLocaleString();
     ctx.fillText(label, pad.left - 8, pad.top + (plotH * i) / 4 + 4);
   }
 }
@@ -298,21 +351,7 @@ function renderRecent() {
   const recent = state.fuel.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 10);
   el("recentCount").textContent = `${recent.length} shown`;
   el("recentFuelRows").innerHTML = recent
-    .map((r) => `<tr><td>${dateOnly(r.date)}</td><td>${noteStation(r)}</td><td class="numeric">${gallons(r.gallons)}</td><td class="numeric">${money(priceFor(r))}</td><td class="numeric">${money(r.cost)}</td></tr>`)
-    .join("");
-}
-
-function renderStationBars() {
-  const totals = new Map();
-  for (const r of state.fuel) {
-    const station = noteStation(r);
-    totals.set(station, (totals.get(station) || 0) + number(r.cost));
-  }
-  const rows = [...totals.entries()].sort((a, b) => b[1] - a[1]);
-  const max = Math.max(...rows.map(([, total]) => total), 1);
-  el("stationCount").textContent = `${rows.length} stations`;
-  el("stationBars").innerHTML = rows
-    .map(([station, total]) => `<div class="barRow"><strong>${station.replace("Costco ", "")}</strong><div class="barTrack"><div class="barFill" style="width:${(total / max) * 100}%"></div></div><span class="barMeta">${money(total)}</span></div>`)
+    .map((r) => `<tr><td>${dateOnly(r.date)}</td><td class="numeric">${formatOdometer(r.odometer) || ""}</td><td class="numeric">${formatFuelVolume(r.gallons)}</td><td class="numeric">${money(priceFor(r))}</td><td class="numeric">${money(r.cost)}</td></tr>`)
     .join("");
 }
 
@@ -329,14 +368,9 @@ function editableCell(record, field, onChange) {
 
 function renderFuelTable() {
   const query = el("fuelSearch").value.trim().toLowerCase();
-  const station = el("stationFilter").value;
-  const stations = [...new Set(state.fuel.map(noteStation))].sort();
-  el("stationFilter").innerHTML = `<option value="">All stations</option>${stations.map((s) => `<option value="${s}">${s}</option>`).join("")}`;
-  el("stationFilter").value = station;
   const rows = state.fuel
     .slice()
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    .filter((r) => !station || noteStation(r) === station)
     .filter((r) => !query || `${r.date} ${r.notes} ${r.tags} ${r.source}`.toLowerCase().includes(query));
   const tbody = el("fuelRows");
   tbody.innerHTML = "";
@@ -417,7 +451,6 @@ function renderAll() {
   renderMetrics();
   drawChart();
   renderRecent();
-  renderStationBars();
   renderFuelTable();
   renderMaintenance();
   renderReminders();
@@ -454,7 +487,6 @@ function bindEvents() {
     });
   });
   el("fuelSearch").addEventListener("input", renderFuelTable);
-  el("stationFilter").addEventListener("change", renderFuelTable);
   el("addFuelRow").addEventListener("click", () => {
     state.fuel.unshift({ date: new Date().toISOString().slice(0, 10), odometer: "", gallons: "", cost: "", notes: "", tags: "", partial_fuelup: "0", missed_fuelup: "0", source: "Manual", fuelio_unique_id: "" });
     save();
@@ -478,8 +510,10 @@ function bindEvents() {
   });
   el("resetData").addEventListener("click", async () => {
     localStorage.removeItem(STORAGE_KEY);
+    saveSettings();
     await loadSeedData();
     renderAll();
+    updateSettingsStatus("Data reset; settings kept");
   });
   el("importFuel").addEventListener("change", async (event) => {
     const file = event.target.files[0];
@@ -504,7 +538,9 @@ function bindEvents() {
 }
 
 async function init() {
-  if (!loadSaved()) await loadSeedData();
+  const loaded = loadSaved();
+  loadSavedSettings();
+  if (!loaded) await loadSeedData();
   bindEvents();
   renderAll();
 }
