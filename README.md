@@ -6,20 +6,22 @@ Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger record vi
 
 - `index.html` - app shell
 - `styles.css` - responsive dashboard styling
-- `app.js` - CSV parsing, charts, local edits, import/export
+- `app.js` - CSV parsing, charts, GitHub issue entry forms, import/export
 - `data/fuel.csv` - sanitized public fuel ledger for GitHub Pages
+- `data/manual_fuel.csv` - public manual fill-ups submitted from GitHub Pages issues
 - `data/fuel.private.csv` - local merged Fuelio and Costco data, ignored by git
 - `data/costco_fuel.csv` - local Costco-only fill-ups, ignored by git
 - `data/Fuelio_latest.csv` - local newest Fuelio backup pulled from Gmail, ignored by git
 - `data/maintenance.csv` - maintenance records
 - `data/reminders.csv` - reminder records
+- `.github/workflows/update-ledger-entry.yml` - owner-only issue workflow that commits manual fill-ups and maintenance costs
 - `scripts/merge_fuelio_costco.py` - rebuilds private and public fuel ledgers
 - `scripts/update_costco_fillups.py` - fetches new Costco gas receipts through the local managed Brave session
 - `scripts/run_costco_monitor.sh` - scheduled-task wrapper that commits and pushes sanitized updates
 
 ## GitHub Pages
 
-Publish this folder from a public repository or a GitHub Pages-enabled private repository. The app has no server component and stores edits in browser localStorage until exported.
+Publish this folder from a public repository or a GitHub Pages-enabled private repository. The app has no server component. New fill-ups and maintenance costs are drafted in browser localStorage, then submitted through a prefilled GitHub issue that an owner-only workflow commits to CSV.
 
 For privacy, the committed `data/fuel.csv` omits raw Fuelio IDs, exact Fuelio location fields, Costco receipt numbers, Costco station/city notes, email addresses, account identifiers, and membership identifiers. The raw imported files stay ignored by git.
 
@@ -32,6 +34,8 @@ python3 scripts/merge_fuelio_costco.py
 ```
 
 The merge writes `data/fuel.private.csv` for local use and `data/fuel.csv` for publishing. It prefers Fuelio odometer data when a Costco receipt matches by date, gallons, and total cost. Unmatched Costco receipts remain in the ledger without odometer values.
+
+Manual public fill-ups submitted from the page are stored in `data/manual_fuel.csv`; the merge includes them so scheduled Costco/Fuelio rebuilds do not discard them. Fuelio maintenance-cost rows are imported from the backup when the `## Costs` section contains records.
 
 ## Scheduled Costco Updates
 

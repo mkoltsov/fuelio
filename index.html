@@ -26,6 +26,7 @@
   <main class="layout">
     <aside class="sidebar" aria-label="Views">
       <button class="navItem active" data-view="dashboard" type="button">Report</button>
+      <button class="navItem" data-view="addEntry" type="button">Add Entry</button>
       <button class="navItem" data-view="fuel" type="button">Fuel</button>
       <button class="navItem" data-view="maintenance" type="button">Maintenance</button>
       <button class="navItem" data-view="reminders" type="button">Reminders</button>
@@ -85,6 +86,63 @@
         </section>
       </section>
 
+      <section id="addEntry" class="view" aria-labelledby="addEntryTitle">
+        <div class="sectionHeader">
+          <div>
+            <h2 id="addEntryTitle">Add Entry</h2>
+            <p>Draft locally, then commit through a GitHub issue.</p>
+          </div>
+        </div>
+        <div class="entryGrid">
+          <section class="panel entryPanel">
+            <div class="panelHeader">
+              <h3>Fill-up</h3>
+              <span>liters and odometer</span>
+            </div>
+            <form id="fillupForm" class="entryForm">
+              <label>Date <input id="fillupDate" data-entry-field type="date" required></label>
+              <label>Odometer <input id="fillupOdometer" data-entry-field type="number" min="0" step="1" inputmode="numeric" required></label>
+              <label>Liters <input id="fillupLiters" data-entry-field type="number" min="0" step="0.001" inputmode="decimal" required></label>
+              <label>Total cost <input id="fillupCost" data-entry-field type="number" min="0" step="0.01" inputmode="decimal" required></label>
+              <label class="span2">Notes <input id="fillupNotes" data-entry-field type="text" maxlength="120"></label>
+              <div class="entryActions span2">
+                <span id="fillupStatus" class="entryStatus">Loading draft</span>
+                <a id="saveFillup" class="saveButton disabled" href="#" aria-disabled="true" target="_blank" rel="noreferrer">Save fill-up to GitHub</a>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel entryPanel">
+            <div class="panelHeader">
+              <h3>Maintenance Cost</h3>
+              <span>service record</span>
+            </div>
+            <form id="maintenanceForm" class="entryForm">
+              <label>Date <input id="maintenanceDate" data-entry-field type="date" required></label>
+              <label>Odometer <input id="maintenanceOdometer" data-entry-field type="number" min="0" step="1" inputmode="numeric"></label>
+              <label>Service <input id="maintenanceService" data-entry-field type="text" maxlength="80" required></label>
+              <label>Category
+                <select id="maintenanceCategory" data-entry-field>
+                  <option>Service</option>
+                  <option>Repair</option>
+                  <option>Tires</option>
+                  <option>Inspection</option>
+                  <option>Registration</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>Total cost <input id="maintenanceCost" data-entry-field type="number" min="0" step="0.01" inputmode="decimal" required></label>
+              <label>Vendor <input id="maintenanceVendor" data-entry-field type="text" maxlength="80"></label>
+              <label class="span2">Notes <input id="maintenanceNotes" data-entry-field type="text" maxlength="160"></label>
+              <div class="entryActions span2">
+                <span id="maintenanceStatus" class="entryStatus">Loading draft</span>
+                <a id="saveMaintenance" class="saveButton disabled" href="#" aria-disabled="true" target="_blank" rel="noreferrer">Save maintenance to GitHub</a>
+              </div>
+            </form>
+          </section>
+        </div>
+      </section>
+
       <section id="fuel" class="view" aria-labelledby="fuelTitle">
         <div class="sectionHeader">
           <div>
@@ -135,10 +193,6 @@
       </section>
     </section>
   </main>
-
-  <template id="editableCellTemplate">
-    <input class="cellInput" type="text">
-  </template>
 
   <script src="app.js"></script>
 </body>

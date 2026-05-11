@@ -1,0 +1,162 @@
+name: Update ledger entry
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update-ledger-entry:
+    if: startsWith(github.event.issue.title, '[fuel-ledger-entry]') && github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract ledger entry
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          GALLON_TO_LITER = 3.785411784
+          FUEL_HEADERS = ["date", "odometer", "gallons", "cost", "notes", "tags", "partial_fuelup", "missed_fuelup", "source", "fuelio_unique_id"]
+          MAINT_HEADERS = ["date", "odometer", "service", "category", "cost", "vendor", "notes"]
+
+          def payload_from_issue():
+              body = os.environ.get("ISSUE_BODY", "")
+              match = re.search(r"```json\s*(\{.*?\})\s*```", body, re.S)
+              if not match:
+                  raise SystemExit("No fenced JSON payload found")
+              return json.loads(match.group(1))
+
+          def clean_text(value, limit=120):
+              text = re.sub(r"\s+", " ", str(value or "")).strip()
+              return text[:limit]
+
+          def clean_date(value):
+              text = str(value or "")[:10]
+              if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+                  raise SystemExit(f"Invalid date: {value}")
+              return text
+
+          def num(value):
+              try:
+                  return float(str(value or "").replace("$", "").replace(",", ""))
+              except ValueError:
+                  return 0.0
+
+          def fmt(value, places):
+              return f"{num(value):.{places}f}"
+
+          def read_rows(path, headers):
+              if not path.exists():
+                  return []
+              with path.open("r", encoding="utf-8", newline="") as handle:
+                  return [{h: row.get(h, "") for h in headers} for row in csv.DictReader(handle)]
+
+          def write_rows(path, headers, rows):
+              path.parent.mkdir(parents=True, exist_ok=True)
+              with path.open("w", encoding="utf-8", newline="") as handle:
+                  writer = csv.DictWriter(handle, fieldnames=headers, lineterminator="\n")
+                  writer.writeheader()
+                  writer.writerows(rows)
+
+          def fuel_key(row):
+              return (
+                  clean_text(row.get("date")),
+                  fmt(row.get("odometer"), 0),
+                  fmt(row.get("gallons"), 3),
+                  fmt(row.get("cost"), 2),
+              )
+
+          def maintenance_key(row):
+              return (
+                  clean_text(row.get("date")),
+                  fmt(row.get("odometer"), 0),
+                  clean_text(row.get("service")).lower(),
+                  fmt(row.get("cost"), 2),
+              )
+
+          def upsert(path, headers, row, key_fn):
+              rows = read_rows(path, headers)
+              key = key_fn(row)
+              rows = [existing for existing in rows if key_fn(existing) != key]
+              rows.append(row)
+              rows.sort(key=lambda r: (clean_text(r.get("date")), num(r.get("odometer")), clean_text(r.get("service") or r.get("source"))))
+              write_rows(path, headers, rows)
+
+          payload = payload_from_issue()
+          kind = payload.get("kind") or payload.get("type")
+          entry = payload.get("entry") or payload
+
+          if kind == "fillup":
+              date = clean_date(entry.get("date"))
+              odometer = round(num(entry.get("odometer")))
+              liters = num(entry.get("liters"))
+              gallons = num(entry.get("gallons"))
+              cost = num(entry.get("cost"))
+              if gallons <= 0 and liters > 0:
+                  gallons = liters / GALLON_TO_LITER
+              if liters <= 0 and gallons > 0:
+                  liters = gallons * GALLON_TO_LITER
+              if odometer <= 0 or gallons <= 0 or cost < 0:
+                  raise SystemExit("Fill-up requires odometer, fuel volume, and non-negative cost")
+              price_liter = cost / liters if liters else 0
+              notes = clean_text(entry.get("notes")) or (f"{price_liter:.3f}/L" if price_liter else "manual entry")
+              row = {
+                  "date": date,
+                  "odometer": str(odometer),
+                  "gallons": f"{gallons:.3f}",
+                  "cost": f"{cost:.2f}",
+                  "notes": notes,
+                  "tags": "Manual",
+                  "partial_fuelup": "0",
+                  "missed_fuelup": "0",
+                  "source": "Manual GitHub",
+                  "fuelio_unique_id": "",
+              }
+              upsert(Path("data/manual_fuel.csv"), FUEL_HEADERS, row, fuel_key)
+              upsert(Path("data/fuel.csv"), FUEL_HEADERS, row, fuel_key)
+          elif kind == "maintenance":
+              date = clean_date(entry.get("date"))
+              service = clean_text(entry.get("service"), 80)
+              cost = num(entry.get("cost"))
+              if not service or cost <= 0:
+                  raise SystemExit("Maintenance requires service and positive cost")
+              row = {
+                  "date": date,
+                  "odometer": str(round(num(entry.get("odometer")))) if num(entry.get("odometer")) else "",
+                  "service": service,
+                  "category": clean_text(entry.get("category"), 40) or "Service",
+                  "cost": f"{cost:.2f}",
+                  "vendor": clean_text(entry.get("vendor"), 80),
+                  "notes": clean_text(entry.get("notes"), 160),
+              }
+              upsert(Path("data/maintenance.csv"), MAINT_HEADERS, row, maintenance_key)
+          else:
+              raise SystemExit(f"Unsupported ledger entry kind: {kind}")
+          PY
+      - name: Commit ledger entry
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/fuel.csv data/manual_fuel.csv data/maintenance.csv
+          if git diff --cached --quiet; then
+            echo "No ledger changes"
+          else
+            git commit -m "Update fuel ledger entry"
+            git push
+          fi
+      - name: Close issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body "Ledger entry saved to CSV."
+          gh issue close "${{ github.event.issue.number }}"

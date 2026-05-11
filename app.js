@@ -1,5 +1,7 @@
 const STORAGE_KEY = "fuel-ledger-pages-v2";
 const SETTINGS_KEY = "fuel-ledger-settings-v1";
+const ENTRY_DRAFT_KEY = "fuel-ledger-entry-drafts-v1";
+const ISSUE_URL = "https://github.com/mkoltsov/fuelio/issues/new";
 const CHART_METRICS = ["spend", "price", "liters", "consumption", "odometer"];
 const GALLON_TO_LITER = 3.785411784;
 const MILE_TO_KM = 1.609344;
@@ -149,9 +151,10 @@ function normalizeFuel(record) {
   };
 }
 
-function updateSettingsStatus(message) {
-  const node = el("settingsStatus");
-  if (node) node.textContent = message;
+function updateStorageStatus(message) {
+  document.querySelectorAll(".entryStatus").forEach((node) => {
+    node.textContent = message;
+  });
 }
 
 function writeLocalStorage(key, value) {
@@ -159,7 +162,7 @@ function writeLocalStorage(key, value) {
     localStorage.setItem(key, value);
     return true;
   } catch {
-    updateSettingsStatus("Browser storage is blocked");
+    updateStorageStatus("Browser storage is blocked");
     return false;
   }
 }
@@ -187,6 +190,10 @@ function loadSavedSettings() {
   const data = readJSONStorage(SETTINGS_KEY);
   applySettings(data);
   return Boolean(data);
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function save() {
@@ -254,6 +261,17 @@ function metrics() {
   };
 }
 
+function maintenanceMetrics() {
+  const rows = state.maintenance.filter((r) => number(r.cost));
+  const totalCost = rows.reduce((sum, r) => sum + number(r.cost), 0);
+  const latest = rows.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  return {
+    count: rows.length,
+    totalCost,
+    latest,
+  };
+}
+
 function monthlyData() {
   const buckets = new Map();
   const economyByRecord = new Map(fuelWithEconomy().map((row) => [row.record, row]));
@@ -283,15 +301,16 @@ function monthlyData() {
 
 function renderMetrics() {
   const m = metrics();
+  const maintenance = maintenanceMetrics();
   el("datasetStatus").textContent = `${m.count} fill-ups in public CSV`;
   el("dateRange").textContent = m.start && m.end ? `${m.start} to ${m.end}` : "No records loaded";
   const defs = [
     ["Latest odometer", formatOdometer(m.latestOdometer?.odometer) || "n/a", dateOnly(m.latestOdometer?.date) || "No reading"],
     ["Avg consumption", formatConsumption(m.avgConsumption) || "n/a", `${m.economyCount} odometer intervals`],
-    ["Distance tracked", formatKm(m.economyKm), "Intervals with odometer"],
-    ["Fuel bought", formatLiters(m.totalLiters), "Converted from gallons"],
-    ["Avg fuel price", `${money(m.averagePrice)}/L`, `Range ${money(m.minPrice)} to ${money(m.maxPrice)}`],
     ["Fuel spend", money(m.totalCost), "Receipt totals"],
+    ["Maintenance", money(maintenance.totalCost), `${maintenance.count} records`],
+    ["Total cost", money(m.totalCost + maintenance.totalCost), "Fuel plus maintenance"],
+    ["Fuel bought", formatLiters(m.totalLiters), "Converted from gallons"],
   ];
   el("metricsGrid").innerHTML = defs
     .map(([label, value, hint]) => `<article class="metric"><div class="metricLabel">${label}</div><div class="metricValue">${value}</div><div class="metricHint">${hint}</div></article>`)
@@ -371,6 +390,7 @@ function renderRecent() {
 
 function renderQuality() {
   const m = metrics();
+  const maintenance = maintenanceMetrics();
   const economyRows = fuelWithEconomy().filter((r) => r.consumption > 0);
   const latestInterval = economyRows.at(-1);
   const missingRecent = state.fuel
@@ -381,20 +401,10 @@ function renderQuality() {
     .map((r) => dateOnly(r.date));
   el("qualityList").innerHTML = [
     ["Last interval", latestInterval ? formatConsumption(latestInterval.consumption) : "n/a", latestInterval ? `${formatKm(latestInterval.km)} since previous fill-up` : "Need odometer readings"],
+    ["Latest maintenance", maintenance.latest?.service || "n/a", maintenance.latest ? `${dateOnly(maintenance.latest.date)} · ${money(maintenance.latest.cost)}` : "No maintenance costs in Fuelio backup"],
     ["Missing odometer", String(m.missingOdometer), missingRecent.length ? missingRecent.join(", ") : "Recent rows are complete"],
     ["Fresh data", dateOnly(m.latest?.date) || "n/a", "Loaded from data/fuel.csv on each visit"],
   ].map(([label, value, hint]) => `<div class="insightRow"><span>${label}</span><strong>${value}</strong><small>${hint}</small></div>`).join("");
-}
-
-function editableCell(record, field, onChange) {
-  const input = document.createElement("input");
-  input.className = "cellInput";
-  input.value = record[field] ?? "";
-  input.addEventListener("change", () => {
-    record[field] = input.value;
-    onChange();
-  });
-  return input;
 }
 
 function renderFuelTable() {
@@ -435,11 +445,22 @@ function renderMaintenance() {
     tbody.innerHTML = `<tr><td class="empty" colspan="7">No maintenance records</td></tr>`;
     return;
   }
-  for (const r of state.maintenance) {
+  const rows = state.maintenance.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  for (const r of rows) {
     const tr = document.createElement("tr");
-    for (const field of ["date", "odometer", "service", "category", "cost", "vendor", "notes"]) {
+    const cells = [
+      [dateOnly(r.date), ""],
+      [formatOdometer(r.odometer) || "—", "numeric"],
+      [r.service || "", ""],
+      [r.category || "", ""],
+      [money(r.cost), "numeric"],
+      [r.vendor || "", ""],
+      [r.notes || "", ""],
+    ];
+    for (const [value, className] of cells) {
       const td = document.createElement("td");
-      td.append(editableCell(r, field, () => { save(); renderAll(); }));
+      if (className) td.className = className;
+      td.textContent = value;
       tr.append(td);
     }
     tbody.append(tr);
@@ -489,6 +510,131 @@ function download(name, text, type = "text/csv") {
   URL.revokeObjectURL(url);
 }
 
+function formValue(id) {
+  return el(id).value.trim();
+}
+
+function setFormValue(id, value) {
+  const node = el(id);
+  if (node) node.value = value || "";
+}
+
+function draftState() {
+  return readJSONStorage(ENTRY_DRAFT_KEY) || {};
+}
+
+function fillupPayload() {
+  return {
+    kind: "fillup",
+    entry: {
+      date: formValue("fillupDate"),
+      odometer: Math.round(number(formValue("fillupOdometer"))),
+      liters: number(formValue("fillupLiters")),
+      cost: number(formValue("fillupCost")),
+      notes: formValue("fillupNotes"),
+    },
+    source: "github-pages",
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function maintenancePayload() {
+  return {
+    kind: "maintenance",
+    entry: {
+      date: formValue("maintenanceDate"),
+      odometer: Math.round(number(formValue("maintenanceOdometer"))),
+      service: formValue("maintenanceService"),
+      category: formValue("maintenanceCategory"),
+      cost: number(formValue("maintenanceCost")),
+      vendor: formValue("maintenanceVendor"),
+      notes: formValue("maintenanceNotes"),
+    },
+    source: "github-pages",
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function isValidFillup(payload) {
+  return Boolean(payload.entry.date && payload.entry.odometer > 0 && payload.entry.liters > 0 && payload.entry.cost >= 0);
+}
+
+function isValidMaintenance(payload) {
+  return Boolean(payload.entry.date && payload.entry.service && payload.entry.cost > 0);
+}
+
+function issueHref(payload) {
+  const body = [
+    "Update the fuel ledger from the GitHub Pages entry form.",
+    "",
+    "```json",
+    JSON.stringify(payload, null, 2),
+    "```",
+  ].join("\n");
+  const params = new URLSearchParams({
+    title: `[fuel-ledger-entry] ${payload.kind} ${payload.entry.date || todayISO()}`,
+    body,
+  });
+  return `${ISSUE_URL}?${params.toString()}`;
+}
+
+function setIssueLink(linkId, statusId, payload, valid, validMessage, invalidMessage) {
+  const link = el(linkId);
+  const status = el(statusId);
+  link.href = valid ? issueHref(payload) : "#";
+  link.setAttribute("aria-disabled", valid ? "false" : "true");
+  link.classList.toggle("disabled", !valid);
+  status.textContent = valid ? validMessage : invalidMessage;
+}
+
+function updateEntryLinks() {
+  const fillup = fillupPayload();
+  const maintenance = maintenancePayload();
+  setIssueLink("saveFillup", "fillupStatus", fillup, isValidFillup(fillup), "Draft saved here; open GitHub to commit this fill-up.", "Date, odometer, liters, and total cost are required.");
+  setIssueLink("saveMaintenance", "maintenanceStatus", maintenance, isValidMaintenance(maintenance), "Draft saved here; open GitHub to commit this cost.", "Date, service, and cost are required.");
+}
+
+function saveEntryDrafts() {
+  writeLocalStorage(ENTRY_DRAFT_KEY, JSON.stringify({
+    fillup: fillupPayload().entry,
+    maintenance: maintenancePayload().entry,
+    updated_at: new Date().toISOString(),
+  }));
+  updateEntryLinks();
+}
+
+function loadEntryDrafts() {
+  const drafts = draftState();
+  const fillup = drafts.fillup || {};
+  const maintenance = drafts.maintenance || {};
+  setFormValue("fillupDate", fillup.date || todayISO());
+  setFormValue("fillupOdometer", fillup.odometer);
+  setFormValue("fillupLiters", fillup.liters);
+  setFormValue("fillupCost", fillup.cost);
+  setFormValue("fillupNotes", fillup.notes);
+  setFormValue("maintenanceDate", maintenance.date || todayISO());
+  setFormValue("maintenanceOdometer", maintenance.odometer);
+  setFormValue("maintenanceService", maintenance.service);
+  setFormValue("maintenanceCategory", maintenance.category || "Service");
+  setFormValue("maintenanceCost", maintenance.cost);
+  setFormValue("maintenanceVendor", maintenance.vendor);
+  setFormValue("maintenanceNotes", maintenance.notes);
+  updateEntryLinks();
+}
+
+function bindEntryForms() {
+  document.querySelectorAll("[data-entry-field]").forEach((node) => {
+    node.addEventListener("input", saveEntryDrafts);
+    node.addEventListener("change", saveEntryDrafts);
+  });
+  ["saveFillup", "saveMaintenance"].forEach((id) => {
+    el(id).addEventListener("click", (event) => {
+      if (el(id).getAttribute("aria-disabled") === "true") event.preventDefault();
+    });
+  });
+  loadEntryDrafts();
+}
+
 function bindEvents() {
   document.querySelectorAll(".navItem").forEach((button) => {
     button.addEventListener("click", () => {
@@ -527,6 +673,7 @@ function bindEvents() {
     renderAll();
     event.target.value = "";
   });
+  bindEntryForms();
   window.addEventListener("resize", drawChart);
 }
 

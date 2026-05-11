@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FUELIO = ROOT / "data" / "Fuelio_latest.csv"
 COSTCO = ROOT / "data" / "costco_fuel.csv"
+MANUAL_FUEL = ROOT / "data" / "manual_fuel.csv"
 OUT = ROOT / "data" / "fuel.private.csv"
 PUBLIC_OUT = ROOT / "data" / "fuel.csv"
 MAINT_OUT = ROOT / "data" / "maintenance.csv"
@@ -24,6 +25,8 @@ FUEL_HEADERS = [
     "source",
     "fuelio_unique_id",
 ]
+
+MAINT_HEADERS = ["date", "odometer", "service", "category", "cost", "vendor", "notes"]
 
 
 def read_sections(path):
@@ -100,6 +103,29 @@ def read_costco_rows():
     return out
 
 
+def read_manual_fuel_rows():
+    if not MANUAL_FUEL.exists():
+        return []
+    with MANUAL_FUEL.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    out = []
+    for row in rows:
+        clean = {h: row.get(h, "") for h in FUEL_HEADERS}
+        clean["date"] = date_key(row.get("date"))
+        clean["odometer"] = fmt(row.get("odometer"), 0)
+        clean["gallons"] = fmt(row.get("gallons"), 3)
+        clean["cost"] = fmt(row.get("cost"), 2)
+        clean["notes"] = row.get("notes", "")
+        clean["tags"] = row.get("tags", "Manual")
+        clean["partial_fuelup"] = row.get("partial_fuelup", "0")
+        clean["missed_fuelup"] = row.get("missed_fuelup", "0")
+        clean["source"] = row.get("source", "Manual GitHub")
+        clean["fuelio_unique_id"] = ""
+        if clean["date"] and clean["gallons"] and clean["cost"]:
+            out.append(clean)
+    return out
+
+
 def fuelio_rows():
     sections = read_sections(FUELIO)
     logs = sections.get("Log", [])
@@ -132,9 +158,72 @@ def fuelio_rows():
     return out
 
 
+def fuelio_maintenance_rows(sections):
+    categories = {row.get("CostTypeID", ""): row.get("Name", "") for row in sections.get("CostCategories", [])}
+    out = []
+    for row in sections.get("Costs", []):
+        if row.get("isIncome") == "1":
+            continue
+        date = date_key(row.get("Date"))
+        cost = fmt(row.get("Cost"), 2)
+        if not date or not cost:
+            continue
+        category = categories.get(row.get("CostTypeID", ""), row.get("CostTypeID", ""))
+        out.append({
+            "date": date,
+            "odometer": fmt(row.get("Odo"), 0),
+            "service": row.get("CostTitle", "").strip() or "Maintenance",
+            "category": category or "Fuelio",
+            "cost": cost,
+            "vendor": "",
+            "notes": row.get("Notes", "").strip(),
+        })
+    return out
+
+
+def maintenance_key(row):
+    return (
+        date_key(row.get("date")),
+        fmt(row.get("odometer"), 0),
+        (row.get("service") or "").strip().lower(),
+        fmt(row.get("cost"), 2),
+    )
+
+
+def read_existing_maintenance():
+    if not MAINT_OUT.exists():
+        return []
+    with MAINT_OUT.open("r", encoding="utf-8", newline="") as handle:
+        return [{h: row.get(h, "") for h in MAINT_HEADERS} for row in csv.DictReader(handle)]
+
+
+def write_maintenance(fuelio_maintenance):
+    existing = read_existing_maintenance()
+    rows = []
+    seen = set()
+    for row in existing + fuelio_maintenance:
+        clean = {h: row.get(h, "") for h in MAINT_HEADERS}
+        clean["date"] = date_key(clean.get("date"))
+        clean["odometer"] = fmt(clean.get("odometer"), 0)
+        clean["cost"] = fmt(clean.get("cost"), 2)
+        key = maintenance_key(clean)
+        if key in seen or not clean["date"]:
+            continue
+        seen.add(key)
+        rows.append(clean)
+    rows.sort(key=lambda row: (row.get("date", ""), num(row.get("odometer")), row.get("service", "")))
+    with MAINT_OUT.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=MAINT_HEADERS, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    return rows
+
+
 def merge():
+    sections = read_sections(FUELIO)
     costco = read_costco_rows()
     fuelio = fuelio_rows()
+    manual = read_manual_fuel_rows()
     costco_by_key = {normalized_match_key(row): row for row in costco}
     merged = []
     matched_costco_keys = set()
@@ -164,6 +253,13 @@ def merge():
         if normalized_match_key(row) not in matched_costco_keys:
             merged.append(row)
 
+    existing_keys = {normalized_match_key(row) for row in merged}
+    for row in manual:
+        key = normalized_match_key(row)
+        if key not in existing_keys:
+            existing_keys.add(key)
+            merged.append(row)
+
     merged.sort(key=lambda row: (row.get("date", ""), num(row.get("odometer")), row.get("source", "")))
     with OUT.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=FUEL_HEADERS, lineterminator="\n")
@@ -182,14 +278,15 @@ def merge():
         writer.writeheader()
         writer.writerows(public_rows)
 
-    if not MAINT_OUT.exists() or MAINT_OUT.read_text(encoding="utf-8").strip() == "date,odometer,service,category,cost,vendor,notes":
-        MAINT_OUT.write_text("date,odometer,service,category,cost,vendor,notes\n", encoding="utf-8")
+    maintenance = write_maintenance(fuelio_maintenance_rows(sections))
 
     return {
         "fuelio_rows": len(fuelio),
         "costco_rows": len(costco),
+        "manual_rows": len(manual),
         "merged_rows": len(merged),
         "matched_costco_rows": len(matched_costco_keys),
+        "maintenance_rows": len(maintenance),
         "output": str(OUT),
         "public_output": str(PUBLIC_OUT),
     }

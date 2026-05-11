@@ -38,8 +38,22 @@ The public CSV keeps dates, odometer readings, gallons, total cost, generic sour
 2. Click `Import CSV`.
 3. Select your private CSV, for example:
    `data/fuel.private.csv`
-4. The imported data is stored in that browser's localStorage.
-5. Use `Export Fuel` or `Export Backup` after edits.
+4. The imported data is used in that browser session for review/export.
+5. Use `Export Fuel` or `Export Backup` if you need a local copy.
+
+## Add Public Entries From The Page
+
+The `Add Entry` view follows the weekly meal-plan pattern:
+
+1. Enter a fill-up or maintenance cost.
+2. The draft is stored in that browser's localStorage.
+3. Click the GitHub save button.
+4. Open the prefilled issue.
+5. The owner-only GitHub Action commits the sanitized CSV update, comments, and closes the issue.
+
+Fill-ups are written to both `data/manual_fuel.csv` and `data/fuel.csv`. Maintenance costs are written to `data/maintenance.csv`.
+
+This requires GitHub Issues and Actions to be enabled for the repository.
 
 ## Publish Updated Sanitized Data
 

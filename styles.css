@@ -358,22 +358,6 @@ th.numeric {
   text-align: right;
 }
 
-.cellInput {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--ink);
-  min-height: 30px;
-  min-width: 90px;
-  padding: 5px 7px;
-  width: 100%;
-}
-
-.cellInput:focus {
-  background: #11161b;
-  border-color: #5e7184;
-}
-
 .filters {
   align-items: center;
   display: flex;
@@ -393,6 +377,83 @@ th.numeric {
 
 .filters input {
   min-width: 320px;
+}
+
+.entryGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.entryPanel {
+  align-self: start;
+}
+
+.entryForm {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 14px;
+}
+
+.entryForm label {
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  gap: 6px;
+}
+
+.entryForm input,
+.entryForm select {
+  background: #171d23;
+  border: 1px solid #46535f;
+  border-radius: 7px;
+  color: var(--ink);
+  min-height: 38px;
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.span2 {
+  grid-column: 1 / -1;
+}
+
+.entryActions {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.entryStatus {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.saveButton {
+  align-items: center;
+  background: var(--amber);
+  border: 1px solid #d69719;
+  border-radius: 7px;
+  color: #151a1f;
+  display: inline-flex;
+  font-weight: 720;
+  min-height: 38px;
+  padding: 8px 12px;
+  text-decoration: none;
+}
+
+.saveButton:hover {
+  background: #ffd05e;
+}
+
+.saveButton.disabled {
+  background: #4a5159;
+  border-color: #4a5159;
+  color: #aeb8c2;
+  cursor: not-allowed;
 }
 
 .reminderList {
@@ -433,6 +494,10 @@ th.numeric {
   .reportGrid {
     grid-template-columns: 1fr;
   }
+
+  .entryGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 900px) {
@@ -468,6 +533,11 @@ th.numeric {
     min-width: 0;
     width: 100%;
   }
+
+  .entryActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 620px) {
@@ -487,5 +557,9 @@ th.numeric {
 
   .metric:last-child {
     border-bottom: 0;
+  }
+
+  .entryForm {
+    grid-template-columns: 1fr;
   }
 }
