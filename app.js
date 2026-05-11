@@ -117,8 +117,33 @@ function formatConsumption(value) {
   return n ? `${n.toFixed(1)} L/100 km` : "";
 }
 
+function formatPricePerLiter(value) {
+  return number(value) ? `${money(value)}/L` : "";
+}
+
+function formatDays(value) {
+  const n = number(value);
+  return n ? `${n.toFixed(1)} days` : "";
+}
+
 function dateOnly(value) {
   return String(value || "").slice(0, 10);
+}
+
+function safeDate(value) {
+  const date = new Date(`${dateOnly(value)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysBetween(start, end) {
+  const a = safeDate(start);
+  const b = safeDate(end);
+  return a && b ? (b - a) / 86400000 : 0;
+}
+
+function formatMonth(value) {
+  const date = safeDate(`${value}-01`);
+  return date ? date.toLocaleDateString(undefined, { month: "short", year: "2-digit" }) : value;
 }
 
 function pricePerLiterFor(record) {
@@ -395,6 +420,63 @@ function monthlyData() {
     }));
 }
 
+function fuelRecords() {
+  return state.fuel
+    .filter((r) => number(r.gallons) || number(r.cost))
+    .slice()
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+function sourceBreakdown() {
+  const groups = new Map();
+  for (const record of fuelRecords()) {
+    const name = record.source || "Unknown";
+    if (!groups.has(name)) groups.set(name, { name, count: 0, spend: 0, liters: 0 });
+    const group = groups.get(name);
+    group.count += 1;
+    group.spend += number(record.cost);
+    group.liters += litersFromGallons(record.gallons);
+  }
+  return [...groups.values()].sort((a, b) => b.spend - a.spend);
+}
+
+function statsDetails() {
+  const m = metrics();
+  const fuel = fuelRecords();
+  const economyRows = fuelWithEconomy().filter((r) => r.consumption > 0);
+  const economyCost = economyRows.reduce((sum, row) => sum + number(row.record.cost), 0);
+  const dated = fuel.filter((r) => safeDate(r.date));
+  const cadences = [];
+  for (let i = 1; i < dated.length; i += 1) {
+    const gap = daysBetween(dated[i - 1].date, dated[i].date);
+    if (gap > 0 && gap < 120) cadences.push(gap);
+  }
+  const averageCadence = cadences.length ? cadences.reduce((sum, gap) => sum + gap, 0) / cadences.length : 0;
+  const bestEconomy = economyRows.reduce((best, row) => (!best || row.consumption < best.consumption ? row : best), null);
+  const worstEconomy = economyRows.reduce((worst, row) => (!worst || row.consumption > worst.consumption ? row : worst), null);
+  const priced = fuel
+    .map((record) => ({ record, price: pricePerLiterFor(record) }))
+    .filter((row) => row.price > 0);
+  const cheapest = priced.reduce((best, row) => (!best || row.price < best.price ? row : best), null);
+  const priciest = priced.reduce((worst, row) => (!worst || row.price > worst.price ? row : worst), null);
+  const firstDate = dated[0]?.date || "";
+  const lastDate = dated.at(-1)?.date || "";
+  const activeDays = Math.max(1, daysBetween(firstDate, lastDate));
+  return {
+    ...m,
+    averageFillLiters: m.count ? m.totalLiters / m.count : 0,
+    averageFillCost: m.count ? m.totalCost / m.count : 0,
+    averageCadence,
+    activeDays,
+    dailyFuelCost: m.totalCost / activeDays,
+    costPer100Km: m.economyKm ? (economyCost / m.economyKm) * 100 : 0,
+    bestEconomy,
+    worstEconomy,
+    cheapest,
+    priciest,
+  };
+}
+
 function renderMetrics() {
   const m = metrics();
   const maintenance = maintenanceMetrics();
@@ -415,8 +497,10 @@ function renderMetrics() {
 
 function drawChart() {
   const canvas = el("trendChart");
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
   const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.round(rect.width * ratio);
   canvas.height = Math.round(rect.height * ratio);
@@ -475,6 +559,218 @@ function drawChart() {
   }
 }
 
+function setupStatCanvas(id) {
+  const canvas = el(id);
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * ratio);
+  canvas.height = Math.round(rect.height * ratio);
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  ctx.font = "12px sans-serif";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  return { canvas, ctx, width: rect.width, height: rect.height };
+}
+
+function drawEmptyChart(chart, message) {
+  const { ctx, width, height } = chart;
+  ctx.fillStyle = "#8f9aa7";
+  ctx.textAlign = "center";
+  ctx.fillText(message, width / 2, height / 2);
+}
+
+function chartX(index, count, pad, width) {
+  if (count <= 1) return pad.left;
+  return pad.left + ((width - pad.left - pad.right) * index) / (count - 1);
+}
+
+function chartY(value, min, max, pad, height) {
+  const span = Math.max(max - min, 1);
+  return pad.top + (height - pad.top - pad.bottom) * (1 - (value - min) / span);
+}
+
+function drawChartGrid(ctx, width, height, pad) {
+  ctx.strokeStyle = "#2d3742";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= 4; i += 1) {
+    const y = pad.top + ((height - pad.top - pad.bottom) * i) / 4;
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(width - pad.right, y);
+  }
+  ctx.stroke();
+}
+
+function drawAxisLabels(ctx, rows, values, min, max, pad, width, height, formatY, labelForRow) {
+  ctx.fillStyle = "#cbd4df";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i += 1) {
+    const value = max - ((max - min) * i) / 4;
+    ctx.fillText(formatY(value), pad.left - 8, pad.top + ((height - pad.top - pad.bottom) * i) / 4 + 4);
+  }
+  const step = Math.max(1, Math.ceil(rows.length / 6));
+  ctx.textAlign = "center";
+  rows.forEach((row, index) => {
+    if (index % step && index !== rows.length - 1) return;
+    ctx.fillText(labelForRow(row), chartX(index, rows.length, pad, width), height - 12);
+  });
+}
+
+function drawLineAreaChart(id, rows, options) {
+  const chart = setupStatCanvas(id);
+  if (!chart) return;
+  const { ctx, width, height } = chart;
+  const data = rows
+    .map((row) => ({ row, value: number(options.value(row)) }))
+    .filter((row) => row.value > 0);
+  if (!data.length) {
+    drawEmptyChart(chart, "No chart data");
+    return;
+  }
+  const pad = { left: options.leftPad || 54, right: 14, top: 18, bottom: 34 };
+  const values = data.map((row) => row.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const min = options.includeZero ? 0 : Math.max(0, rawMin - (rawMax - rawMin || rawMax) * 0.14);
+  const max = rawMax + (rawMax - min || rawMax) * 0.12;
+  drawChartGrid(ctx, width, height, pad);
+  drawAxisLabels(ctx, data.map((d) => d.row), values, min, max, pad, width, height, options.formatY, options.label);
+
+  const gradient = ctx.createLinearGradient(0, pad.top, 0, height - pad.bottom);
+  gradient.addColorStop(0, options.fill);
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.beginPath();
+  data.forEach((point, index) => {
+    const x = chartX(index, data.length, pad, width);
+    const y = chartY(point.value, min, max, pad, height);
+    if (!index) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.lineTo(chartX(data.length - 1, data.length, pad, width), height - pad.bottom);
+  ctx.lineTo(chartX(0, data.length, pad, width), height - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  ctx.beginPath();
+  data.forEach((point, index) => {
+    const x = chartX(index, data.length, pad, width);
+    const y = chartY(point.value, min, max, pad, height);
+    if (!index) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = options.color;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  if (data.length < 90) {
+    ctx.fillStyle = options.point || options.color;
+    data.forEach((point, index) => {
+      ctx.beginPath();
+      ctx.arc(chartX(index, data.length, pad, width), chartY(point.value, min, max, pad, height), 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  if (options.average) {
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const y = chartY(average, min, max, pad, height);
+    ctx.strokeStyle = "#ffbf2f";
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(width - pad.right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#ffdf8a";
+    ctx.textAlign = "left";
+    ctx.fillText(`avg ${options.formatY(average)}`, pad.left + 8, y - 6);
+  }
+}
+
+function drawMonthlyCostChart() {
+  const chart = setupStatCanvas("statCostChart");
+  if (!chart) return;
+  const { ctx, width, height } = chart;
+  const data = monthlyData().slice(-18);
+  if (!data.length) {
+    drawEmptyChart(chart, "No monthly data");
+    return;
+  }
+  const pad = { left: 54, right: 18, top: 18, bottom: 34 };
+  const maxSpend = Math.max(...data.map((d) => d.spend), 1);
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+  drawChartGrid(ctx, width, height, pad);
+  drawAxisLabels(ctx, data, data.map((d) => d.spend), 0, maxSpend * 1.18, pad, width, height, moneyEstimate, (row) => row.month.slice(2));
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const barW = Math.max(7, plotW / data.length - 5);
+  data.forEach((row, index) => {
+    const x = pad.left + (plotW * index) / data.length + 2.5;
+    const h = (row.spend / (maxSpend * 1.18)) * plotH;
+    const y = pad.top + plotH - h;
+    const gradient = ctx.createLinearGradient(0, y, 0, height - pad.bottom);
+    gradient.addColorStop(0, "#4aa3ff");
+    gradient.addColorStop(1, "#25618f");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, barW, h);
+  });
+  ctx.beginPath();
+  data.forEach((row, index) => {
+    const x = pad.left + (plotW * index) / data.length + barW / 2 + 2.5;
+    const y = pad.top + plotH * (1 - row.count / maxCount);
+    if (!index) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = "#ffbf2f";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = "#ffdf8a";
+  data.forEach((row, index) => {
+    const x = pad.left + (plotW * index) / data.length + barW / 2 + 2.5;
+    const y = pad.top + plotH * (1 - row.count / maxCount);
+    ctx.beginPath();
+    ctx.arc(x, y, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.textAlign = "left";
+  ctx.fillText("bars: spend", pad.left + 4, pad.top + 10);
+  ctx.fillStyle = "#ffdf8a";
+  ctx.fillText("line: fill-ups", pad.left + 96, pad.top + 10);
+}
+
+function drawStatsCharts() {
+  drawLineAreaChart("statConsumptionChart", fuelWithEconomy(), {
+    value: (row) => row.consumption,
+    label: (row) => dateOnly(row.record.date).slice(2, 7),
+    formatY: (value) => value.toFixed(1),
+    color: "#36b37e",
+    fill: "rgba(54, 179, 126, 0.28)",
+    average: true,
+  });
+  drawMonthlyCostChart();
+  drawLineAreaChart("statPriceChart", monthlyData(), {
+    value: (row) => row.price,
+    label: (row) => row.month.slice(2),
+    formatY: (value) => `$${value.toFixed(2)}`,
+    color: "#e3a04f",
+    fill: "rgba(227, 160, 79, 0.28)",
+    average: true,
+  });
+  drawLineAreaChart("statOdometerChart", fuelRecords().filter((row) => number(row.odometer) > 0), {
+    value: (row) => row.odometer,
+    label: (row) => dateOnly(row.date).slice(2, 7),
+    formatY: (value) => Math.round(value).toLocaleString(),
+    color: "#8f7cf4",
+    fill: "rgba(143, 124, 244, 0.26)",
+    leftPad: 70,
+  });
+}
+
 function renderRecent() {
   const recent = state.fuel.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 10);
   const economyRows = fuelWithEconomy();
@@ -503,6 +799,65 @@ function renderQuality() {
     ["Missing odometer", String(m.missingOdometer), missingRecent.length ? missingRecent.join(", ") : "Recent rows are complete"],
     ["Fresh data", dateOnly(m.latest?.date) || "n/a", "Loaded from data/fuel.csv on each visit"],
   ].map(([label, value, hint]) => `<div class="insightRow"><span>${label}</span><strong>${value}</strong><small>${hint}</small></div>`).join("");
+}
+
+function renderStats() {
+  const kpis = el("statsKpis");
+  if (!kpis) return;
+  const s = statsDetails();
+  const monthly = monthlyData();
+  const latestMonth = monthly.at(-1);
+  const defs = [
+    ["Fill-ups", s.count.toLocaleString(), s.start && s.end ? `${s.start} to ${s.end}` : "No records"],
+    ["Fuel spend", money(s.totalCost), `${money(s.averageFillCost)} average fill-up`],
+    ["Fuel bought", formatLiters(s.totalLiters), `${formatLiters(s.averageFillLiters)} average fill`],
+    ["Distance tracked", formatKm(s.economyKm), `${s.economyCount} economy intervals`],
+    ["Avg consumption", formatConsumption(s.avgConsumption) || "n/a", "Weighted by tracked distance"],
+    ["Cost / 100 km", s.costPer100Km ? money(s.costPer100Km) : "n/a", "Fuel cost over measured intervals"],
+    ["Avg price", formatPricePerLiter(s.averagePrice) || "n/a", `${formatPricePerLiter(s.minPrice) || "n/a"} to ${formatPricePerLiter(s.maxPrice) || "n/a"}`],
+    ["Fill-up cadence", formatDays(s.averageCadence) || "n/a", `${money(s.dailyFuelCost)} per active day`],
+  ];
+  kpis.innerHTML = defs
+    .map(([label, value, hint]) => `<article class="statKpi"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>`)
+    .join("");
+
+  const highlightDefs = [
+    ["Best consumption", s.bestEconomy ? formatConsumption(s.bestEconomy.consumption) : "n/a", s.bestEconomy ? `${dateOnly(s.bestEconomy.record.date)} · ${formatKm(s.bestEconomy.km)}` : "Need odometer intervals"],
+    ["Highest consumption", s.worstEconomy ? formatConsumption(s.worstEconomy.consumption) : "n/a", s.worstEconomy ? `${dateOnly(s.worstEconomy.record.date)} · ${formatKm(s.worstEconomy.km)}` : "Need odometer intervals"],
+    ["Cheapest fuel", s.cheapest ? formatPricePerLiter(s.cheapest.price) : "n/a", s.cheapest ? `${dateOnly(s.cheapest.record.date)} · ${money(s.cheapest.record.cost)}` : "No priced fill-ups"],
+    ["Highest fuel price", s.priciest ? formatPricePerLiter(s.priciest.price) : "n/a", s.priciest ? `${dateOnly(s.priciest.record.date)} · ${money(s.priciest.record.cost)}` : "No priced fill-ups"],
+    ["Latest month", latestMonth ? money(latestMonth.spend) : "n/a", latestMonth ? `${latestMonth.count} fill-ups · ${formatLiters(latestMonth.liters)}` : "No monthly data"],
+  ];
+  el("statHighlights").innerHTML = highlightDefs
+    .map(([label, value, hint]) => `<div class="statHighlight"><span>${label}</span><strong>${value}</strong><small>${hint}</small></div>`)
+    .join("");
+
+  const sources = sourceBreakdown();
+  const totalSpend = sources.reduce((sum, source) => sum + source.spend, 0);
+  el("sourceMix").innerHTML = sources.length ? sources.map((source) => {
+    const pct = totalSpend ? (source.spend / totalSpend) * 100 : 0;
+    return `
+      <div class="sourceBar">
+        <div class="sourceBarHeader"><strong>${source.name}</strong><span>${pct.toFixed(0)}%</span></div>
+        <div class="sourceTrack"><span class="sourceFill" style="width: ${Math.max(3, pct).toFixed(1)}%"></span></div>
+        <div class="sourceBarMeta"><span>${source.count} fill-ups</span><span>${money(source.spend)} · ${formatLiters(source.liters)}</span></div>
+      </div>
+    `;
+  }).join("") : `<div class="empty">No source data</div>`;
+
+  const recentMonths = monthly.slice(-12).reverse();
+  el("monthlyScoreboardHint").textContent = `${recentMonths.length} latest months`;
+  el("monthlyStatsRows").innerHTML = recentMonths.length ? recentMonths.map((row) => `
+    <tr>
+      <td>${formatMonth(row.month)}</td>
+      <td class="numeric">${row.count}</td>
+      <td class="numeric">${formatLiters(row.liters)}</td>
+      <td class="numeric">${money(row.spend)}</td>
+      <td class="numeric">${formatPricePerLiter(row.price) || "—"}</td>
+      <td class="numeric">${formatConsumption(row.consumption) || "—"}</td>
+      <td class="numeric">${formatOdometer(row.odometer) || "—"}</td>
+    </tr>
+  `).join("") : `<tr><td class="empty" colspan="7">No monthly data</td></tr>`;
 }
 
 function renderFuelTable() {
@@ -627,6 +982,8 @@ function renderAll() {
   drawChart();
   renderRecent();
   renderQuality();
+  renderStats();
+  drawStatsCharts();
   renderFuelTable();
   renderMaintenance();
   renderSchedule();
@@ -776,6 +1133,7 @@ function bindEvents() {
       button.classList.add("active");
       el(button.dataset.view).classList.add("active");
       drawChart();
+      drawStatsCharts();
     });
   });
   document.querySelectorAll(".segment").forEach((button) => {
@@ -785,6 +1143,7 @@ function bindEvents() {
       state.chartMetric = button.dataset.chart;
       saveSettings();
       drawChart();
+      drawStatsCharts();
     });
   });
   el("fuelSearch").addEventListener("input", renderFuelTable);
@@ -808,7 +1167,10 @@ function bindEvents() {
     event.target.value = "";
   });
   bindEntryForms();
-  window.addEventListener("resize", drawChart);
+  window.addEventListener("resize", () => {
+    drawChart();
+    drawStatsCharts();
+  });
 }
 
 async function init() {

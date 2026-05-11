@@ -456,6 +456,127 @@ th.numeric {
   cursor: not-allowed;
 }
 
+.statsKpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  margin-bottom: 14px;
+}
+
+.statKpi {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 64%),
+    var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 0;
+  padding: 13px;
+}
+
+.statKpi span,
+.statKpi small,
+.statHighlight span,
+.sourceBarHeader,
+.sourceBarMeta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.statKpi strong {
+  color: #f8fbff;
+  display: block;
+  font-size: 24px;
+  line-height: 1.15;
+  margin: 7px 0 5px;
+  overflow-wrap: anywhere;
+}
+
+.statsChartGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.statChartPanel.wide {
+  grid-column: 1 / -1;
+}
+
+.statChartWrap {
+  height: 340px;
+  padding: 12px;
+}
+
+.statChartWrap.small {
+  height: 280px;
+}
+
+.statChartWrap canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.statsInfoGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.statHighlights,
+.sourceMix {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.statHighlight {
+  background: #171d23;
+  border: 1px solid #313b46;
+  border-left: 3px solid var(--green);
+  border-radius: 7px;
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+}
+
+.statHighlight strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.sourceBar {
+  display: grid;
+  gap: 6px;
+}
+
+.sourceBarHeader,
+.sourceBarMeta {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.sourceBarHeader strong {
+  color: var(--ink);
+}
+
+.sourceTrack {
+  background: #151a1f;
+  border: 1px solid #313b46;
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.sourceFill {
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 3px;
+}
+
 .scheduleSummary {
   display: grid;
   gap: 12px;
@@ -550,6 +671,19 @@ th.numeric {
     grid-template-columns: 1fr;
   }
 
+  .statsKpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statsChartGrid,
+  .statsInfoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .statChartPanel.wide {
+    grid-column: auto;
+  }
+
   .scheduleSummary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -615,6 +749,10 @@ th.numeric {
   }
 
   .entryForm {
+    grid-template-columns: 1fr;
+  }
+
+  .statsKpis {
     grid-template-columns: 1fr;
   }
 

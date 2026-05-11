@@ -1,12 +1,12 @@
 # Fuel Ledger Pages
 
-Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger record views.
+Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger and Fuelio record views.
 
 ## Files
 
 - `index.html` - app shell
 - `styles.css` - responsive dashboard styling
-- `app.js` - CSV parsing, charts, GitHub issue entry forms, import/export
+- `app.js` - CSV parsing, statistics charts, GitHub issue entry forms, import/export
 - `data/fuel.csv` - sanitized public fuel ledger for GitHub Pages
 - `data/manual_fuel.csv` - public manual fill-ups submitted from GitHub Pages issues
 - `data/fuel.private.csv` - local merged Fuelio and Costco data, ignored by git
@@ -23,6 +23,8 @@ Static GitHub Pages fuel and maintenance ledger inspired by LubeLogger record vi
 ## GitHub Pages
 
 Publish this folder from a public repository or a GitHub Pages-enabled private repository. The app has no server component. New fill-ups and maintenance costs are drafted in browser localStorage, then submitted through a prefilled GitHub issue that an owner-only workflow commits to CSV.
+
+The `Statistics` view shows Fuelio-style fill-up totals, fuel costs, consumption, price, odometer trends, source mix, and a monthly scoreboard from the sanitized public CSV.
 
 For privacy, the committed `data/fuel.csv` omits raw Fuelio IDs, exact Fuelio location fields, Costco receipt numbers, Costco station/city notes, email addresses, account identifiers, and membership identifiers. The raw imported files stay ignored by git.
 

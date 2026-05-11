@@ -26,6 +26,7 @@
   <main class="layout">
     <aside class="sidebar" aria-label="Views">
       <button class="navItem active" data-view="dashboard" type="button">Report</button>
+      <button class="navItem" data-view="statistics" type="button">Statistics</button>
       <button class="navItem" data-view="addEntry" type="button">Add Entry</button>
       <button class="navItem" data-view="fuel" type="button">Fuel</button>
       <button class="navItem" data-view="maintenance" type="button">Maintenance</button>
@@ -81,6 +82,92 @@
                 <tr><th>Date</th><th>Odometer</th><th>Liters</th><th>Price</th><th>L/100 km</th><th>Total</th></tr>
               </thead>
               <tbody id="recentFuelRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="statistics" class="view" aria-labelledby="statisticsTitle">
+        <div class="sectionHeader">
+          <div>
+            <h2 id="statisticsTitle">Statistics</h2>
+            <p>Fill-ups, costs, consumption, and mileage trends from the public ledger.</p>
+          </div>
+        </div>
+
+        <div id="statsKpis" class="statsKpis"></div>
+
+        <div class="statsChartGrid">
+          <section class="panel statChartPanel wide">
+            <div class="panelHeader">
+              <h3>Consumption Trend</h3>
+              <span>L/100 km by fill-up</span>
+            </div>
+            <div class="statChartWrap">
+              <canvas id="statConsumptionChart" width="900" height="340" aria-label="Consumption by fill-up chart"></canvas>
+            </div>
+          </section>
+
+          <section class="panel statChartPanel">
+            <div class="panelHeader">
+              <h3>Monthly Cost</h3>
+              <span>spend and fill-ups</span>
+            </div>
+            <div class="statChartWrap small">
+              <canvas id="statCostChart" width="520" height="280" aria-label="Monthly cost chart"></canvas>
+            </div>
+          </section>
+
+          <section class="panel statChartPanel">
+            <div class="panelHeader">
+              <h3>Fuel Price</h3>
+              <span>weighted price per liter</span>
+            </div>
+            <div class="statChartWrap small">
+              <canvas id="statPriceChart" width="520" height="280" aria-label="Fuel price trend chart"></canvas>
+            </div>
+          </section>
+
+          <section class="panel statChartPanel">
+            <div class="panelHeader">
+              <h3>Odometer</h3>
+              <span>mileage progression</span>
+            </div>
+            <div class="statChartWrap small">
+              <canvas id="statOdometerChart" width="520" height="280" aria-label="Odometer trend chart"></canvas>
+            </div>
+          </section>
+        </div>
+
+        <div class="statsInfoGrid">
+          <section class="panel">
+            <div class="panelHeader">
+              <h3>Efficiency Notes</h3>
+              <span>best and worst readings</span>
+            </div>
+            <div id="statHighlights" class="statHighlights"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panelHeader">
+              <h3>Source Mix</h3>
+              <span>records and spend</span>
+            </div>
+            <div id="sourceMix" class="sourceMix"></div>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panelHeader">
+            <h3>Monthly Scoreboard</h3>
+            <span id="monthlyScoreboardHint"></span>
+          </div>
+          <div class="tableWrap compact">
+            <table>
+              <thead>
+                <tr><th>Month</th><th>Fill-ups</th><th>Liters</th><th>Spend</th><th>Price</th><th>L/100 km</th><th>Odometer</th></tr>
+              </thead>
+              <tbody id="monthlyStatsRows"></tbody>
             </table>
           </div>
         </section>
